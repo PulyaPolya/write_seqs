@@ -1,0 +1,2 @@
+LOW_PITCH = 21
+HI_PITCH = 108
