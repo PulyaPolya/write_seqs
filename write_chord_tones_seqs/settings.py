@@ -38,7 +38,6 @@ class ChordTonesDataSettings:
     corpora_sample_proportions: t.Dict[str, float] = field(
         default_factory=lambda: {"RenDissData": 0.1}
     )
-    token_classification: bool = False
 
     def __post_init__(self):
         if self.split_chords and self.salami_slice:

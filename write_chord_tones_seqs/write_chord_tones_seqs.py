@@ -26,10 +26,18 @@ from write_chord_tones_seqs.settings import (
 )
 
 
-@dataclass
 class CorpusItem:
-    csv_path: str
-    synthetic: bool = False
+    def __init__(self, csv_path):
+        json_path = csv_path[:-3] + "json"
+        with open(json_path) as inf:
+            attrs = json.load(inf)
+        self.csv_path = csv_path
+        self.synthetic = attrs["synthetic"]
+        self.score_path = attrs["paths"][0]
+        self.score_id = attrs["score_name"]
+
+    # csv_path: str
+    # synthetic: bool = False
 
 
 def vocab_paths(output_folder):
@@ -103,12 +111,7 @@ def get_items_from_corpora(
             is not None
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
-        to_extend.extend(
-            [
-                CorpusItem(csv_path, corpus_attrs["synthetic"])
-                for csv_path in csv_paths
-            ]
-        )
+        to_extend.extend([CorpusItem(csv_path) for csv_path in csv_paths])
     return items, training_only_items
 
 
@@ -213,11 +216,10 @@ def write_symbols(writer, *symbols):
     writer.writerow(symbols)
 
 
-def get_df_attrs(df, csv_path):
-    score_name = os.path.basename(csv_path)
+def get_df_attrs(df):
     transpose = df.attrs.get("chromatic_transpose", 0)
     scaled_by = df.attrs.get("rhythms_scaled_by", 1.0)
-    return score_name, transpose, scaled_by
+    return transpose, scaled_by
 
 
 class CSVChunkWriter:
@@ -261,7 +263,8 @@ def write_data(
     csv_chunk_writer = CSVChunkWriter(
         format_path,
         [
-            "score_name",
+            "score_id",
+            "score_path",
             "transpose",
             "scaled_by",
             "start_offset",
@@ -283,16 +286,15 @@ def write_data(
                 encoded = midilike_encode(
                     augmented_df, repr_settings, feature_names=("chord_tone",)
                 )
-                score_name, transpose, scaled_by = get_df_attrs(
-                    augmented_df, item.csv_path
-                )
+                transpose, scaled_by = get_df_attrs(augmented_df)
                 for i, segment in enumerate(
                     encoded.segment(ct_settings.window_len, ct_settings.hop)
                 ):
                     print("-\|/"[i % 4], end="\r", flush=True)
                     write_symbols(
                         csv_chunk_writer,
-                        score_name,
+                        item.score_id,
+                        item.score_path,
                         transpose,
                         scaled_by,
                         segment["segment_onset"],

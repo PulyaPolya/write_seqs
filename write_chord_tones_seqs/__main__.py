@@ -1,5 +1,6 @@
 import argparse
 import ast
+import json
 import os
 import random
 import sys
@@ -48,18 +49,24 @@ from write_chord_tones_seqs.write_chord_tones_seqs import write_datasets
 SRC_DATA_DIR = os.getenv("SRC_DATA_DIR")
 
 
-def _sub_parse(arg_list):
+def _sub_parse(arg_list, arg_name):
     out = {}
     if arg_list is None:
         return out
     for arg in arg_list:
-        key, val = arg.split("=", maxsplit=1)
-        try:
-            val = ast.literal_eval(val)
-        except ValueError:
-            print(f"Error parsing '{val}' with ast.literal_eval()")
-            sys.exit(1)
-        out[key] = val
+        key, vals = arg.split("=", maxsplit=1)
+        vals = vals.split(",")
+        for i in range(len(vals)):
+            try:
+                vals[i] = ast.literal_eval(vals[i])
+            except ValueError:
+                pass
+        if len(vals) == 1:
+            out[key] = vals[0]
+        else:
+            out[key] = vals
+    print(f"{arg_name} parsed as: ")
+    print(json.dumps(out, indent=2))
     return out
 
 
@@ -97,7 +104,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     random.seed(args.seed)
-    repr_args = _sub_parse(args.repr_args)
+    repr_args = _sub_parse(args.repr_args, "--repr-args")
     if (
         "include_metric_weights" in repr_args
         or "min_weight_to_encode" in repr_args
@@ -113,7 +120,7 @@ if __name__ == "__main__":
     output_folder = write_datasets(
         args.src_data_dir,
         repr_args,
-        _sub_parse(args.data_args),
+        _sub_parse(args.data_args, "--data-args"),
         args.overwrite,
         args.frac,
         path_kwargs={"seed": args.seed},
