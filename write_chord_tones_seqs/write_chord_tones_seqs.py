@@ -1,29 +1,28 @@
 import csv
 import json
+import logging
 import os
 import pickle
 import random
 import typing as t
-import warnings
-
 from dataclasses import dataclass
 from numbers import Number
 
 import pandas as pd
-
-from reprs.midi_like import (
-    MidiLikeSettings,
-    midilike_encode,
-    inputs_vocab_items,
-)
+import yaml
+from reprs.midi_like import MidiLikeSettings
+from reprs.oct import OctupleEncodingSettings
+from reprs.shared import ReprSettingsBase
 
 from write_chord_tones_seqs.augmentations import augment
-from write_chord_tones_seqs.utils.partition import partition
 from write_chord_tones_seqs.settings import (
     ChordTonesDataSettings,
-    save_dclass,
     path_from_dataclass,
+    save_dclass,
 )
+from write_chord_tones_seqs.utils.partition import partition
+
+LOGGER = logging.getLogger(__name__)
 
 
 class CorpusItem:
@@ -43,7 +42,7 @@ class CorpusItem:
 def vocab_paths(output_folder):
     return (
         os.path.join(output_folder, "inputs_vocab.list.{ext}"),
-        os.path.join(output_folder, "targets_vocab.list.{ext}"),
+        os.path.join(output_folder, "targets_{feature_i}_vocab.list.{ext}"),
     )
 
 
@@ -59,23 +58,32 @@ def get_split_dir(output_folder: str, split: str) -> str:
 def get_items_from_corpora(
     src_data_dir: str,
     ct_settings: ChordTonesDataSettings,
-    repr_settings: MidiLikeSettings,
+    repr_settings: ReprSettingsBase,
 ) -> t.Tuple[t.List[str], t.List[str]]:
+    """Returns a pair of lists to paths, `items` and `training_only_items`.
+
+    Called by `get_items()` below which returns train/valid/test splits.
+    """
+    # `corpora` are names of subfolders within the main data dir, such as `RenDissData`,
+    #   `ABCData`, etc.
     _, corpora, _ = next(os.walk(src_data_dir))
     for corpus_name in ct_settings.corpora_to_exclude:
         if corpus_name not in corpora:
-            warnings.warn(
-                f"corpus '{corpus_name}' in `corpora_to_exclude` not recognized"
+            LOGGER.warn(
+                f"corpus '{corpus_name}' in `corpora_to_exclude` not recognized. "
+                f"Valid corpora include {corpora}"
             )
     for corpus_name in ct_settings.training_only_corpora:
         if corpus_name not in corpora:
-            warnings.warn(
-                f"corpus '{corpus_name}' in `training_only_corpora` not recognized"
+            LOGGER.warn(
+                f"corpus '{corpus_name}' in `training_only_corpora` not recognized. "
+                f"Valid corpora include {corpora}"
             )
     training_only_items = []
     items = []
 
     for corpus_name in corpora:
+        print(corpus_name)
         if (
             ct_settings.corpora_to_include
             and corpus_name not in ct_settings.corpora_to_include
@@ -93,11 +101,11 @@ def get_items_from_corpora(
         corpus_dir = os.path.join(src_data_dir, corpus_name)
         with open(os.path.join(corpus_dir, "attrs.json")) as inf:
             corpus_attrs = json.load(inf)
-        if (
-            repr_settings.include_metric_weights
-            and not corpus_attrs["has_weights"]
-        ):
-            print(f"Corpus {corpus_name} has no weights, skipping")
+
+        if not repr_settings.validate_corpus(corpus_attrs):
+            LOGGER.warning(
+                f"Corpus {corpus_name} was not validated by {repr_settings.__class__.__name__}, skipping it"
+            )
             continue
         csv_paths = [
             os.path.join(corpus_dir, p)
@@ -105,9 +113,7 @@ def get_items_from_corpora(
             if p.endswith(".csv")
         ]
         if (
-            prop := ct_settings.corpora_sample_proportions.get(
-                corpus_name, None
-            )
+            prop := ct_settings.corpora_sample_proportions.get(corpus_name, None)
             is not None
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
@@ -118,13 +124,14 @@ def get_items_from_corpora(
 def get_items(
     src_data_dir: str,
     ct_settings: ChordTonesDataSettings,
-    repr_settings: MidiLikeSettings,
+    repr_settings: ReprSettingsBase,
     seed: t.Optional[int] = None,
-    proportions: t.Tuple[Number] = (0.8, 0.1, 0.1),
+    proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
     # corpora_to_exclude: t.Sequence[str] = (),
     # training_only_corpora: t.Sequence[str] = "synthetic",
 ) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
+    """Returns lists of paths for files in train, valid, and test splits, respectively."""
     # We would like to know how many tokens each input file has in order to
     #   partition the splits as exactly as possible. But that would require
     #   processing them all first and for various reasons we don't want to do
@@ -139,25 +146,23 @@ def get_items(
     items, training_only_items = get_items_from_corpora(
         src_data_dir, ct_settings, repr_settings
     )
+    if len(items) * frac < 1:
+        raise ValueError(f"{len(items)=} * {frac=} < 1")
     if frac != 1.0:
         items, _ = partition((frac, 1.0 - frac), items)
-        training_only_items, _ = partition(
-            (frac, 1.0 - frac), training_only_items
-        )
+        training_only_items, _ = partition((frac, 1.0 - frac), training_only_items)
     total_len = len(items) + len(training_only_items)
 
     training_only_prop = len(training_only_items) / total_len
     if training_only_prop >= proportions[0]:
-        warnings.warn(f"training set will contain *only* training_only_corpora")
-    adjusted_proportions = (
-        max(proportions[0] - training_only_prop, 0),
-    ) + proportions[1:]
+        LOGGER.warning(f"training set will contain *only* training_only_corpora")
+    adjusted_proportions = (max(proportions[0] - training_only_prop, 0),) + proportions[
+        1:
+    ]
     adjusted_proportions = tuple(
         prop / sum(adjusted_proportions) for prop in adjusted_proportions
     )
-    train_items, valid_items, test_items = partition(
-        adjusted_proportions, items
-    )
+    train_items, valid_items, test_items = partition(adjusted_proportions, items)
     train_items.extend(training_only_items)
     return train_items, valid_items, test_items
 
@@ -167,49 +172,54 @@ def init_dirs(output_folder):
     os.makedirs(dirname, exist_ok=True)
 
 
-def item_iterator(
-    items: t.List[CorpusItem], verbose: bool
-) -> t.Iterator[CorpusItem]:
-    for i, item in enumerate(items):
-        if verbose:
+def item_iterator(items: t.List[CorpusItem], verbose: bool) -> t.Iterator[CorpusItem]:
+    if verbose:
+        for i, item in enumerate(items):
             print(f"{i + 1}/{len(items)}", item.csv_path)
-        yield item
+            yield item
+    else:
+        yield from items
 
 
-def segment_iter(
-    df: pd.DataFrame,
-    window_len: t.Optional[int],
-    hop: t.Optional[int],
-    window_len_jitter: t.Optional[int] = None,
-    hop_jitter: t.Optional[int] = None,
-    min_window_len: t.Optional[int] = None,
-) -> t.Iterator[pd.DataFrame]:
-
-    if min_window_len is None:
-        min_window_len = window_len / 2
-    else:
-        assert min_window_len <= window_len
-    if window_len_jitter is None:
-        this_window_len = window_len
-    else:
-        window_len_l_bound = max(window_len - window_len_jitter, min_window_len)
-        window_len_u_bound = window_len + window_len_jitter + 1
-    if hop_jitter is None:
-        this_hop = hop
-    else:
-        hop_l_bound = max(1, hop - hop_jitter)
-        hop_u_bound = hop + hop_jitter + 1
-    start_i = 0
-    while start_i < len(df) - min_window_len:
-        if window_len_jitter is not None:
-            this_window_len = random.randint(
-                window_len_l_bound, window_len_u_bound
-            )
-        if hop_jitter is not None:
-            this_hop = random.randint(hop_l_bound, hop_u_bound)
-        end_i = start_i + this_window_len
-        yield df.iloc[start_i:end_i]
-        start_i += this_hop
+# # TODO: (Malcolm 2023-09-14) I think this function may be unused, in which case I should
+# #   remove it
+# def segment_iter(
+#     df: pd.DataFrame,
+#     window_len: int,
+#     hop: t.Optional[int],
+#     window_len_jitter: t.Optional[int] = None,
+#     hop_jitter: t.Optional[int] = None,
+#     min_window_len: t.Optional[int] = None,
+# ) -> t.Iterator[pd.DataFrame]:
+#     """
+#     Segments data frames, optionally applying jitter.
+#     """
+#     if min_window_len is None:
+#         min_window_len = window_len // 2
+#     else:
+#         assert min_window_len <= window_len
+#     if window_len_jitter is None:
+#         this_window_len = window_len
+#     else:
+#         window_len_l_bound = max(window_len - window_len_jitter, min_window_len)
+#         window_len_u_bound = window_len + window_len_jitter + 1
+#     if hop_jitter is None:
+#         this_hop = hop
+#     else:
+#         assert hop is not None
+#         hop_l_bound = max(1, hop - hop_jitter)
+#         hop_u_bound = hop + hop_jitter + 1
+#     start_i = 0
+#     while start_i < len(df) - min_window_len:
+#         if window_len_jitter is not None:
+#             this_window_len = random.randint(
+#                 window_len_l_bound, window_len_u_bound  # type:ignore
+#             )
+#         if hop_jitter is not None:
+#             this_hop = random.randint(hop_l_bound, hop_u_bound)  # type:ignore
+#         end_i = start_i + this_window_len  # type:ignore
+#         yield df.iloc[start_i:end_i]
+#         start_i += this_hop  # type:ignore
 
 
 def write_symbols(writer, *symbols):
@@ -223,6 +233,8 @@ def get_df_attrs(df):
 
 
 class CSVChunkWriter:
+    """Writes output to CSV file, dividing into chunks of `n_lines_per_chunk`."""
+
     def __init__(self, path_format_str, header, n_lines_per_chunk=50000):
         self._header = header
         self._fmt_str = path_format_str
@@ -254,12 +266,13 @@ def write_data(
     items: t.List[CorpusItem],
     split: str,
     ct_settings: ChordTonesDataSettings,
-    repr_settings: MidiLikeSettings,
+    repr_settings: ReprSettingsBase,
     verbose: bool = True,
 ):
     data_dir = get_split_dir(output_folder, split)
     format_path = os.path.join(data_dir, "{}.csv")
     os.makedirs(os.path.dirname(format_path), exist_ok=True)
+    features = list(ct_settings.features)
     csv_chunk_writer = CSVChunkWriter(
         format_path,
         [
@@ -269,8 +282,8 @@ def write_data(
             "scaled_by",
             "start_offset",
             "events",
-            "chord_tone",
-        ],
+        ]
+        + features,
     )
     try:
         init_dirs(output_folder)
@@ -280,26 +293,28 @@ def write_data(
             #   which is better. For now I'm putting augmentation first because
             #   then if we use a hop size < window_len we only need to augment
             #   each note once, rather than many times.
-            for augmented_df in augment(
-                split, labeled_df, ct_settings, item.synthetic
-            ):
-                encoded = midilike_encode(
-                    augmented_df, repr_settings, feature_names=("chord_tone",)
+            for augmented_df in augment(split, labeled_df, ct_settings, item.synthetic):
+                encoded = repr_settings.encode_f(
+                    augmented_df, repr_settings, feature_names=features
                 )
+
                 transpose, scaled_by = get_df_attrs(augmented_df)
                 for i, segment in enumerate(
-                    encoded.segment(ct_settings.window_len, ct_settings.hop)
+                    encoded.segment(
+                        ct_settings.window_len, ct_settings.hop  # type:ignore
+                    )
                 ):
-                    print("-\|/"[i % 4], end="\r", flush=True)
+                    feature_segments = [" ".join(segment[f]) for f in features]
+                    print("-\\|/"[i % 4], end="\r", flush=True)
                     write_symbols(
                         csv_chunk_writer,
                         item.score_id,
                         item.score_path,
                         transpose,
                         scaled_by,
-                        segment["segment_onset"],
-                        " ".join(segment["input"]),
-                        " ".join(segment["chord_tone"]),
+                        segment["segment_onset"],  # type:ignore
+                        " ".join(segment["input"]),  # type:ignore
+                        *feature_segments,
                     )
     finally:
         csv_chunk_writer.close()
@@ -307,30 +322,36 @@ def write_data(
 
 def write_vocab(
     src_data_dir: str,
-    repr_settings: MidiLikeSettings,
+    repr_settings: ReprSettingsBase,
     inputs_vocab_path: str,
     targets_vocab_path: str,
+    features: t.Iterable[str],
 ):
-    inputs_vocab = inputs_vocab_items(repr_settings)
+    inputs_vocab = repr_settings.inputs_vocab
     with open(inputs_vocab_path.format(ext="pickle"), "wb") as outf:
         pickle.dump(inputs_vocab, outf)
     with open(inputs_vocab_path.format(ext="json"), "w") as outf:
         json.dump(inputs_vocab, outf)
-    with open(os.path.join(src_data_dir, "chord_tones_vocab.json")) as inf:
-        targets_vocab = json.load(inf)
-    with open(targets_vocab_path.format(ext="pickle"), "wb") as outf:
-        pickle.dump(targets_vocab, outf)
-    with open(targets_vocab_path.format(ext="json"), "w") as outf:
-        json.dump(targets_vocab, outf)
+    for feature_i, feature in enumerate(features):
+        with open(os.path.join(src_data_dir, f"{feature}s_vocab.json")) as inf:
+            targets_vocab = json.load(inf)
+        with open(
+            targets_vocab_path.format(feature_i=feature_i, ext="pickle"), "wb"
+        ) as outf:
+            pickle.dump(targets_vocab, outf)
+        with open(
+            targets_vocab_path.format(feature_i=feature_i, ext="json"), "w"
+        ) as outf:
+            json.dump(targets_vocab, outf)
 
 
 def write_datasets_sub(
     src_data_dir: str,
     ct_settings: ChordTonesDataSettings,
-    repr_settings: MidiLikeSettings,
+    repr_settings: ReprSettingsBase,
     splits_todo: t.Dict[str, bool],
     output_folder: str,
-    ratios: t.Tuple[Number, Number, Number] = (0.8, 0.1, 0.1),
+    ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
     vocab_only: bool = False,
 ):
@@ -346,7 +367,10 @@ def write_datasets_sub(
         if todo:
             if not wrote_vocab:
                 write_vocab(
-                    src_data_dir, repr_settings, *vocab_paths(output_folder)
+                    src_data_dir,
+                    repr_settings,
+                    *vocab_paths(output_folder),
+                    ct_settings.features,
                 )
                 wrote_vocab = True
             if not vocab_only:
@@ -359,9 +383,7 @@ def write_datasets_sub(
                 )
 
 
-def check_if_splits_exist(
-    output_folder: str, overwrite: bool
-) -> t.Dict[str, bool]:
+def check_if_splits_exist(output_folder: str, overwrite: bool) -> t.Dict[str, bool]:
     out = {}
     for split in ("train", "valid", "test"):
         data_path = get_split_dir(output_folder, split)
@@ -369,19 +391,33 @@ def check_if_splits_exist(
     return out
 
 
+def load_config_from_yaml(yaml_path: str | None) -> dict:
+    if yaml_path is None:
+        return {}
+    with open(yaml_path, "r") as yaml_file:
+        return yaml.safe_load(yaml_file)
+
+
 def write_datasets(
     src_data_dir: str,
-    repr_args: t.Dict,
-    data_args: t.Dict,
+    # repr_type: t.Literal["oct", "midilike"],
+    repr_settings: str,
+    data_settings: str,
     overwrite: bool,
     frac: float = 1.0,
-    ratios: t.Tuple[Number, Number, Number] = (0.8, 0.1, 0.1),
+    ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     path_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
 ):
     if path_kwargs is None:
         path_kwargs = {}
-    ct_settings = ChordTonesDataSettings(**data_args)
-    repr_settings = MidiLikeSettings(**repr_args)
+    ct_settings = ChordTonesDataSettings(**load_config_from_yaml(data_settings))
+    if ct_settings.repr_type == "oct":
+        repr_setting_cls = OctupleEncodingSettings
+    elif ct_settings.repr_type == "midilike":
+        repr_setting_cls = MidiLikeSettings
+    else:
+        raise NotImplementedError()
+    repr_settings = repr_setting_cls(**load_config_from_yaml(repr_settings))
     output_folder = path_from_dataclass(ct_settings)
     output_folder = path_from_dataclass(
         repr_settings,
@@ -393,6 +429,9 @@ def write_datasets(
     print("Chord tones data folder: ", output_folder)
     save_dclass(ct_settings, output_folder)
     save_dclass(repr_settings, output_folder)
+    # with open(os.path.join(output_folder, "repr.txt"), "w") as outf:
+    #     outf.write(repr_type)
+
     splits_todo = check_if_splits_exist(output_folder, overwrite)
     if any(splits_todo.values()):
         write_datasets_sub(
@@ -406,4 +445,5 @@ def write_datasets(
         )
     else:
         print("All data exists")
+    print("Chord tones data folder: ", output_folder)
     return output_folder
