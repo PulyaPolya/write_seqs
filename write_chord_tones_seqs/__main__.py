@@ -26,6 +26,11 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--frac", type=float, default=1.0)
     parser.add_argument(
+        "--output-dir",
+        required=True,
+        help="If a relative path, relative to CT_SEQS_BASE_DIR environment variable.",
+    )
+    parser.add_argument(
         "--src-data-dir",
         type=str,
         default=SRC_DATA_DIR,
@@ -48,6 +53,7 @@ if __name__ == "__main__":
     random.seed(args.seed)
     output_folder = write_datasets(
         args.src_data_dir,
+        args.output_dir,
         # args.repr_type,
         args.repr_settings,
         args.data_settings,

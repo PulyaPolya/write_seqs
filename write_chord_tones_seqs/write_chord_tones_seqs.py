@@ -17,7 +17,7 @@ from reprs.shared import ReprSettingsBase
 from write_chord_tones_seqs.augmentations import augment
 from write_chord_tones_seqs.settings import (
     ChordTonesDataSettings,
-    path_from_dataclass,
+    get_dataset_base_dir,
     save_dclass,
 )
 from write_chord_tones_seqs.utils.partition import partition
@@ -269,6 +269,8 @@ def write_data(
     repr_settings: ReprSettingsBase,
     verbose: bool = True,
 ):
+    if ct_settings.repr_type != "oct":
+        raise NotImplementedError("I need to implement 'df_indices'")
     data_dir = get_split_dir(output_folder, split)
     format_path = os.path.join(data_dir, "{}.csv")
     os.makedirs(os.path.dirname(format_path), exist_ok=True)
@@ -281,6 +283,7 @@ def write_data(
             "transpose",
             "scaled_by",
             "start_offset",
+            "df_indices",
             "events",
         ]
         + features,
@@ -313,6 +316,7 @@ def write_data(
                         transpose,
                         scaled_by,
                         segment["segment_onset"],  # type:ignore
+                        segment["df_indices"],
                         " ".join(segment["input"]),  # type:ignore
                         *feature_segments,
                     )
@@ -400,6 +404,7 @@ def load_config_from_yaml(yaml_path: str | None) -> dict:
 
 def write_datasets(
     src_data_dir: str,
+    output_dir: str,
     # repr_type: t.Literal["oct", "midilike"],
     repr_settings: str,
     data_settings: str,
@@ -418,14 +423,15 @@ def write_datasets(
     else:
         raise NotImplementedError()
     repr_settings = repr_setting_cls(**load_config_from_yaml(repr_settings))
-    output_folder = path_from_dataclass(ct_settings)
-    output_folder = path_from_dataclass(
-        repr_settings,
-        base_dir=output_folder,
-        ratios=ratios,
-        frac=frac,
-        **path_kwargs,
-    )
+    output_folder = os.path.join(get_dataset_base_dir(), output_dir)
+    # output_folder = path_from_dataclass(ct_settings)
+    # output_folder = path_from_dataclass(
+    #     repr_settings,
+    #     base_dir=output_folder,
+    #     ratios=ratios,
+    #     frac=frac,
+    #     **path_kwargs,
+    # )
     print("Chord tones data folder: ", output_folder)
     save_dclass(ct_settings, output_folder)
     save_dclass(repr_settings, output_folder)

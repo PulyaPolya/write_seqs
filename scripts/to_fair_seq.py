@@ -50,13 +50,10 @@ dict.input.txt      midi_train.txt      targets_0_test.txt  targets_0_valid.txt 
 midi_test.txt       midi_valid.txt      targets_0_train.txt targets_1_test.txt  targets_1_valid.txt
 ```
 
+We also write files `metadata_{split}.csv` containing the 
+"score_id,score_path,transpose,scaled_by,start_offset,df_indices" columns.
+This can be used to collate the examples with their sources
 
-
-To get from one to the other we:
-- rewrite input vocabulary as .txt
-- retrieve separate targets and labels from csv files
-    - join them (if necessary)
-    - write to txt files separated by newlines
 """
 import argparse
 import json
@@ -91,6 +88,9 @@ def main():
     with open(output_dir / "dict.input.txt", "w") as outf:
         outf.write(INPUTS_DICT)
     for split in ("train", "test", "valid"):
+        if not (input_dir / "data" / split).exists():
+            print(f"Warning: {split} directory does not exist")
+            continue
         csv_paths = [
             input_dir / "data" / split / f
             for f in os.listdir(input_dir / "data" / split)
@@ -113,6 +113,20 @@ def main():
                         for row in csv_contents[target]:
                             appendf.write(row)
                             appendf.write("\n")
+            metadata_cols = [
+                name
+                for name in [
+                    "score_id",
+                    "score_path",
+                    "transpose",
+                    "scaled_by",
+                    "start_offset",
+                    "df_indices",
+                ]
+                if name in csv_contents.columns
+            ]
+            metadata_csv = csv_contents[metadata_cols]
+            metadata_csv.to_csv(output_dir / f"metadata_{split}.txt")
 
 
 # The only code past this point should be the call to main()
