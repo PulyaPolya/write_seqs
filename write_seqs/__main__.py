@@ -6,7 +6,7 @@ import random
 import sys
 import warnings
 
-from write_chord_tones_seqs.write_chord_tones_seqs import write_datasets
+from write_seqs.write_seqs import write_datasets
 
 SRC_DATA_DIR = os.getenv("SRC_DATA_DIR")
 
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-dir",
         required=True,
-        help="If a relative path, relative to CT_SEQS_BASE_DIR environment variable.",
+        help="If a relative path, relative to WRITE_SEQS_BASE_DIR environment variable.",
     )
     parser.add_argument(
         "--src-data-dir",

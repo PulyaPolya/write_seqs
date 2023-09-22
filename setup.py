@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="write_chord_tones_seqs",
+    name="write_seqs",
     version="0.0.1",
     author="Malcolm Sailor",
     author_email="malcolm.sailor@gmail.com",

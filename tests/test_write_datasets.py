@@ -1,16 +1,20 @@
 import os
 import random
+from pathlib import Path
 
 import pytest
 
-from write_chord_tones_seqs.write_chord_tones_seqs import write_datasets
+from write_seqs.write_seqs import write_datasets
 
 SRC_DATA_DIR = os.getenv("SRC_DATA_DIR")
 
+CONFIG_DIR = Path(os.path.dirname((os.path.realpath(__file__)))) / "test_configs"
 
-@pytest.mark.skip(
-    reason="needs to be updated to match new signature for `write_datasets()`"
-)
+
 def test_write_datasets():
+    assert SRC_DATA_DIR is not None
     random.seed(42)
-    write_datasets(SRC_DATA_DIR, {}, {}, overwrite=True, frac=0.005)
+    seq_settings_path = CONFIG_DIR / "chord_tones_data_settings.yaml"
+    write_datasets(
+        SRC_DATA_DIR, "scratch", None, seq_settings_path, overwrite=True, frac=0.005
+    )

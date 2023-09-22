@@ -4,8 +4,8 @@ import typing as t
 import pandas as pd
 from music_df import chromatic_transpose
 
-from write_chord_tones_seqs.constants import HI_PITCH, LOW_PITCH
-from write_chord_tones_seqs.settings import ChordTonesDataSettings
+from write_seqs.constants import HI_PITCH, LOW_PITCH
+from write_seqs.settings import SequenceDataSettings
 
 
 def aug_within_range(
@@ -72,7 +72,7 @@ def aug_rhythms(
 def augment(
     split: str,
     labeled_df: pd.DataFrame,
-    settings: ChordTonesDataSettings,
+    settings: SequenceDataSettings,
     synthetic: bool,
 ) -> t.Iterable[pd.DataFrame]:
     augment = (split == "train") and ((not synthetic) or settings.aug_synthetic_data)

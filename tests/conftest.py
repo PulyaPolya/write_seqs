@@ -32,7 +32,7 @@ def slow(request):
 def folders(keep_files):
     if not keep_files:
         directories = {
-            "CT_SEQS_BASE_DIR": tempfile.mkdtemp(),
+            "WRITE_SEQS_BASE_DIR": tempfile.mkdtemp(),
             "DATASET_CACHE_DIR": tempfile.mkdtemp(),
         }
         yield directories
@@ -41,7 +41,7 @@ def folders(keep_files):
 
     else:
         directories = {
-            "CT_SEQS_BASE_DIR": os.path.join(
+            "WRITE_SEQS_BASE_DIR": os.path.join(
                 os.path.dirname((os.path.realpath(__file__))), "temp_out"
             ),
             "DATASET_CACHE_DIR": os.path.join(
@@ -63,6 +63,6 @@ def keep_files(request):
 
 @pytest.fixture(autouse=True)
 def mock_env_user(monkeypatch, folders):
-    monkeypatch.setenv("CT_SEQS_BASE_DIR", folders["CT_SEQS_BASE_DIR"])
+    monkeypatch.setenv("WRITE_SEQS_BASE_DIR", folders["WRITE_SEQS_BASE_DIR"])
     monkeypatch.setenv("DATASET_CACHE_DIR", folders["DATASET_CACHE_DIR"])
     # monkeypatch.setenv("N_MIDI_FILES", os.environ.get("N_MIDI_FILES", "10"))

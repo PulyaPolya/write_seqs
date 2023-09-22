@@ -7,20 +7,17 @@ import random
 import typing as t
 from dataclasses import dataclass
 from numbers import Number
+from pathlib import Path
 
 import pandas as pd
-import yaml
-from reprs.midi_like import MidiLikeSettings
-from reprs.oct import OctupleEncodingSettings
-from reprs.shared import ReprSettingsBase
+import yaml  # type:ignore
+from reprs.midi_like import MidiLikeSettings  # type:ignore
+from reprs.oct import OctupleEncodingSettings  # type:ignore
+from reprs.shared import ReprSettingsBase  # type:ignore
 
-from write_chord_tones_seqs.augmentations import augment
-from write_chord_tones_seqs.settings import (
-    ChordTonesDataSettings,
-    get_dataset_base_dir,
-    save_dclass,
-)
-from write_chord_tones_seqs.utils.partition import partition
+from write_seqs.augmentations import augment
+from write_seqs.settings import SequenceDataSettings, get_dataset_base_dir, save_dclass
+from write_seqs.utils.partition import partition
 
 LOGGER = logging.getLogger(__name__)
 
@@ -57,7 +54,7 @@ def get_split_dir(output_folder: str, split: str) -> str:
 
 def get_items_from_corpora(
     src_data_dir: str,
-    ct_settings: ChordTonesDataSettings,
+    seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
 ) -> t.Tuple[t.List[str], t.List[str]]:
     """Returns a pair of lists to paths, `items` and `training_only_items`.
@@ -67,13 +64,13 @@ def get_items_from_corpora(
     # `corpora` are names of subfolders within the main data dir, such as `RenDissData`,
     #   `ABCData`, etc.
     _, corpora, _ = next(os.walk(src_data_dir))
-    for corpus_name in ct_settings.corpora_to_exclude:
+    for corpus_name in seq_settings.corpora_to_exclude:
         if corpus_name not in corpora:
             LOGGER.warn(
                 f"corpus '{corpus_name}' in `corpora_to_exclude` not recognized. "
                 f"Valid corpora include {corpora}"
             )
-    for corpus_name in ct_settings.training_only_corpora:
+    for corpus_name in seq_settings.training_only_corpora:
         if corpus_name not in corpora:
             LOGGER.warn(
                 f"corpus '{corpus_name}' in `training_only_corpora` not recognized. "
@@ -85,15 +82,15 @@ def get_items_from_corpora(
     for corpus_name in corpora:
         print(corpus_name)
         if (
-            ct_settings.corpora_to_include
-            and corpus_name not in ct_settings.corpora_to_include
+            seq_settings.corpora_to_include
+            and corpus_name not in seq_settings.corpora_to_include
         ):
             continue
-        if corpus_name in ct_settings.corpora_to_exclude:
+        if corpus_name in seq_settings.corpora_to_exclude:
             continue
         if (
-            corpus_name in ct_settings.training_only_corpora
-            and corpus_name not in ct_settings.corpora_to_include
+            corpus_name in seq_settings.training_only_corpora
+            and corpus_name not in seq_settings.corpora_to_include
         ):
             to_extend = training_only_items
         else:
@@ -113,7 +110,7 @@ def get_items_from_corpora(
             if p.endswith(".csv")
         ]
         if (
-            prop := ct_settings.corpora_sample_proportions.get(corpus_name, None)
+            prop := seq_settings.corpora_sample_proportions.get(corpus_name, None)
             is not None
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
@@ -123,7 +120,7 @@ def get_items_from_corpora(
 
 def get_items(
     src_data_dir: str,
-    ct_settings: ChordTonesDataSettings,
+    seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
     seed: t.Optional[int] = None,
     proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
@@ -144,7 +141,7 @@ def get_items(
     if seed is not None:
         random.seed(seed)
     items, training_only_items = get_items_from_corpora(
-        src_data_dir, ct_settings, repr_settings
+        src_data_dir, seq_settings, repr_settings
     )
     if len(items) * frac < 1:
         raise ValueError(f"{len(items)=} * {frac=} < 1")
@@ -265,16 +262,16 @@ def write_data(
     output_folder: str,
     items: t.List[CorpusItem],
     split: str,
-    ct_settings: ChordTonesDataSettings,
+    seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
     verbose: bool = True,
 ):
-    if ct_settings.repr_type != "oct":
+    if seq_settings.repr_type != "oct":
         raise NotImplementedError("I need to implement 'df_indices'")
     data_dir = get_split_dir(output_folder, split)
     format_path = os.path.join(data_dir, "{}.csv")
     os.makedirs(os.path.dirname(format_path), exist_ok=True)
-    features = list(ct_settings.features)
+    features = list(seq_settings.features)
     csv_chunk_writer = CSVChunkWriter(
         format_path,
         [
@@ -296,7 +293,9 @@ def write_data(
             #   which is better. For now I'm putting augmentation first because
             #   then if we use a hop size < window_len we only need to augment
             #   each note once, rather than many times.
-            for augmented_df in augment(split, labeled_df, ct_settings, item.synthetic):
+            for augmented_df in augment(
+                split, labeled_df, seq_settings, item.synthetic
+            ):
                 encoded = repr_settings.encode_f(
                     augmented_df, repr_settings, feature_names=features
                 )
@@ -304,7 +303,7 @@ def write_data(
                 transpose, scaled_by = get_df_attrs(augmented_df)
                 for i, segment in enumerate(
                     encoded.segment(
-                        ct_settings.window_len, ct_settings.hop  # type:ignore
+                        seq_settings.window_len, seq_settings.hop  # type:ignore
                     )
                 ):
                     feature_segments = [" ".join(segment[f]) for f in features]
@@ -351,7 +350,7 @@ def write_vocab(
 
 def write_datasets_sub(
     src_data_dir: str,
-    ct_settings: ChordTonesDataSettings,
+    seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
     splits_todo: t.Dict[str, bool],
     output_folder: str,
@@ -361,7 +360,7 @@ def write_datasets_sub(
 ):
     items_tup = get_items(
         src_data_dir=src_data_dir,
-        ct_settings=ct_settings,
+        seq_settings=seq_settings,
         repr_settings=repr_settings,
         proportions=ratios,
         frac=frac,
@@ -374,7 +373,7 @@ def write_datasets_sub(
                     src_data_dir,
                     repr_settings,
                     *vocab_paths(output_folder),
-                    ct_settings.features,
+                    seq_settings.features,
                 )
                 wrote_vocab = True
             if not vocab_only:
@@ -382,7 +381,7 @@ def write_datasets_sub(
                     output_folder,
                     items,
                     split,
-                    ct_settings,
+                    seq_settings,
                     repr_settings,
                 )
 
@@ -395,7 +394,7 @@ def check_if_splits_exist(output_folder: str, overwrite: bool) -> t.Dict[str, bo
     return out
 
 
-def load_config_from_yaml(yaml_path: str | None) -> dict:
+def load_config_from_yaml(yaml_path: Path | str | None) -> dict:
     if yaml_path is None:
         return {}
     with open(yaml_path, "r") as yaml_file:
@@ -406,8 +405,9 @@ def write_datasets(
     src_data_dir: str,
     output_dir: str,
     # repr_type: t.Literal["oct", "midilike"],
-    repr_settings: str,
-    data_settings: str,
+    repr_settings: Path | str | None,
+    # data_settings are required because we need to specify at least the feature
+    data_settings: Path | str,
     overwrite: bool,
     frac: float = 1.0,
     ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
@@ -415,16 +415,16 @@ def write_datasets(
 ):
     if path_kwargs is None:
         path_kwargs = {}
-    ct_settings = ChordTonesDataSettings(**load_config_from_yaml(data_settings))
-    if ct_settings.repr_type == "oct":
+    seq_settings = SequenceDataSettings(**load_config_from_yaml(data_settings))
+    if seq_settings.repr_type == "oct":
         repr_setting_cls = OctupleEncodingSettings
-    elif ct_settings.repr_type == "midilike":
+    elif seq_settings.repr_type == "midilike":
         repr_setting_cls = MidiLikeSettings
     else:
         raise NotImplementedError()
     repr_settings = repr_setting_cls(**load_config_from_yaml(repr_settings))
     output_folder = os.path.join(get_dataset_base_dir(), output_dir)
-    # output_folder = path_from_dataclass(ct_settings)
+    # output_folder = path_from_dataclass(seq_settings)
     # output_folder = path_from_dataclass(
     #     repr_settings,
     #     base_dir=output_folder,
@@ -433,7 +433,7 @@ def write_datasets(
     #     **path_kwargs,
     # )
     print("Chord tones data folder: ", output_folder)
-    save_dclass(ct_settings, output_folder)
+    save_dclass(seq_settings, output_folder)
     save_dclass(repr_settings, output_folder)
     # with open(os.path.join(output_folder, "repr.txt"), "w") as outf:
     #     outf.write(repr_type)
@@ -442,7 +442,7 @@ def write_datasets(
     if any(splits_todo.values()):
         write_datasets_sub(
             src_data_dir=src_data_dir,
-            ct_settings=ct_settings,
+            seq_settings=seq_settings,
             repr_settings=repr_settings,
             splits_todo=splits_todo,
             output_folder=output_folder,

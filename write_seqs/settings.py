@@ -3,20 +3,21 @@ import os
 import typing as t
 from dataclasses import asdict, dataclass, field
 
-from write_chord_tones_seqs.utils.get_hash import get_hash
+from write_seqs.utils.get_hash import get_hash
 
 
 def get_dataset_base_dir():
     # I encapsulate this in a function so we can change the environment variable
     #   in mock tests
-    return os.getenv("CT_SEQS_BASE_DIR", "")
+    return os.getenv("WRITE_SEQS_BASE_DIR", "")
 
 
 @dataclass()
-class ChordTonesDataSettings:
+class SequenceDataSettings:
     # NB: for MidiLikeEncoding, if "keep_onsets_together", hop is measured in "unique
     #   onsets"; there could be 6 notes sounding at time 1, but hop only considers them
     #   as one onset.
+    features: t.Sequence[str]
     hop: int = 8
     window_len: t.Optional[int] = 128
     min_window_len: t.Optional[int] = None
@@ -27,7 +28,6 @@ class ChordTonesDataSettings:
     aug_rhythms_n_augs: int = 2
 
     repr_type: t.Literal["oct", "midilike"] = "midilike"
-    features: t.Sequence[t.Literal["chord_tone", "harmony_onset"]] = ("chord_tone",)
 
     dataset_name: t.Optional[str] = None
 
@@ -39,6 +39,8 @@ class ChordTonesDataSettings:
     )
 
     def __post_init__(self):
+        if isinstance(self.features, str):
+            self.features = (self.features,)
         if isinstance(self.training_only_corpora, str):
             self.training_only_corpora = (self.training_only_corpora,)
 

@@ -1,5 +1,5 @@
 """
-Output of chord_tones_seqs looks like this:
+Output of write_seqs looks like this:
 ```
 ChordTonesDataSettings_settings.json  data                                  inputs_vocab.list.pickle              targets_vocab.list.pickle
 OctupleEncodingSettings_settings.json inputs_vocab.list.json                targets_vocab.list.json
@@ -24,7 +24,7 @@ dict.input.txt	  midi_test.txt   midi_valid.txt    targets_train.txt
 midi_train.txt  targets_test.txt  targets_valid.txt
 ```
 
-In the multi-target case, output of chord_tones_seqs looks like:
+In the multi-target case, output of write_seqs looks like:
 ```
 ChordTonesDataSettings_settings.json  inputs_vocab.list.json                targets_0_vocab.list.pickle
 OctupleEncodingSettings_settings.json inputs_vocab.list.pickle              targets_1_vocab.list.json
@@ -77,9 +77,9 @@ def main():
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
     with open(input_dir / "ChordTonesDataSettings_settings.json") as inf:
-        ct_settings = json.load(inf)
+        seq_settings = json.load(inf)
 
-    targets = ct_settings["features"]
+    targets = seq_settings["features"]
 
     if os.path.exists(output_dir):
         raise ValueError(f"{output_dir=} exists")
