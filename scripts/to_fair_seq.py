@@ -76,7 +76,15 @@ def main():
     args = parse_args()
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
-    with open(input_dir / "ChordTonesDataSettings_settings.json") as inf:
+    seq_settings_path = input_dir / "SequenceDataSettings_settings.json"
+    if not seq_settings_path.exists():
+        # For backwards compatibility
+        old_seq_settings_path = input_dir / "ChordTonesDataSettings_settings.json"
+        if not old_seq_settings_path.exists():
+            raise FileNotFoundError(seq_settings_path.name)
+        seq_settings_path = old_seq_settings_path
+
+    with open(seq_settings_path) as inf:
         seq_settings = json.load(inf)
 
     targets = seq_settings["features"]

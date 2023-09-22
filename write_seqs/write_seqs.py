@@ -335,9 +335,19 @@ def write_vocab(
         pickle.dump(inputs_vocab, outf)
     with open(inputs_vocab_path.format(ext="json"), "w") as outf:
         json.dump(inputs_vocab, outf)
+    missing_vocabs = []
     for feature_i, feature in enumerate(features):
-        with open(os.path.join(src_data_dir, f"{feature}s_vocab.json")) as inf:
-            targets_vocab = json.load(inf)
+        try:
+            with open(os.path.join(src_data_dir, f"{feature}_vocab.json")) as inf:
+                targets_vocab = json.load(inf)
+        except FileNotFoundError:
+            try:
+                # For backwards compatibility, add plural "s"
+                with open(os.path.join(src_data_dir, f"{feature}s_vocab.json")) as inf:
+                    targets_vocab = json.load(inf)
+            except FileNotFoundError:
+                missing_vocabs.append((feature_i, feature))
+            continue
         with open(
             targets_vocab_path.format(feature_i=feature_i, ext="pickle"), "wb"
         ) as outf:
@@ -346,6 +356,9 @@ def write_vocab(
             targets_vocab_path.format(feature_i=feature_i, ext="json"), "w"
         ) as outf:
             json.dump(targets_vocab, outf)
+    if missing_vocabs:
+        for feature_i, feature in missing_vocabs:
+            LOGGER.warning(f"Missing vocab file for {feature_i=}, {feature}")
 
 
 def write_datasets_sub(
