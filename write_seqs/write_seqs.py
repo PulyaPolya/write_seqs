@@ -277,6 +277,7 @@ def write_data(
         [
             "score_id",
             "score_path",
+            "csv_path",
             "transpose",
             "scaled_by",
             "start_offset",
@@ -312,6 +313,7 @@ def write_data(
                         csv_chunk_writer,
                         item.score_id,
                         item.score_path,
+                        item.csv_path,
                         transpose,
                         scaled_by,
                         segment["segment_onset"],  # type:ignore
