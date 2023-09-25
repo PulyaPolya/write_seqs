@@ -1,3 +1,5 @@
+features:
+  - chord_tone
 corpora_to_exclude:
   - SyntheticData
   - RenDissData
