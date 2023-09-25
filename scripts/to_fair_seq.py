@@ -126,6 +126,7 @@ def main():
                 for name in [
                     "score_id",
                     "score_path",
+                    "csv_path",
                     "transpose",
                     "scaled_by",
                     "start_offset",
