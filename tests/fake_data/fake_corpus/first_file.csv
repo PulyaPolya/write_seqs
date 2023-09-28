@@ -1,0 +1,6 @@
+onset,release,type,pitch,other,dummy_feature
+0.0,4.0,bar,,,na
+0.0,,time_signature,,"{""numerator"": 4, ""denominator"": 4}",na
+0.0,1.0,note,40.0,,foo
+1.0,2.0,note,42.0,,bar
+2.0,4.0,note,44.0,,foo

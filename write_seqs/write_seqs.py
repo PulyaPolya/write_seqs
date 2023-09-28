@@ -25,12 +25,19 @@ LOGGER = logging.getLogger(__name__)
 class CorpusItem:
     def __init__(self, csv_path):
         json_path = csv_path[:-3] + "json"
-        with open(json_path) as inf:
-            attrs = json.load(inf)
+        try:
+            with open(json_path) as inf:
+                attrs = json.load(inf)
+        except FileNotFoundError:
+            attrs = {}
         self.csv_path = csv_path
-        self.synthetic = attrs["synthetic"]
-        self.score_path = attrs["paths"][0]
-        self.score_id = attrs["score_name"]
+        self.synthetic = attrs.get("synthetic", False)
+        score_path = attrs.get("paths", csv_path)
+        if not isinstance(score_path, str):
+            # Assume score_path is a sequence of strings
+            score_path = score_path[0]
+        self.score_path = score_path
+        self.score_id = attrs.get("score_name", csv_path)
 
     # csv_path: str
     # synthetic: bool = False
@@ -96,8 +103,11 @@ def get_items_from_corpora(
         else:
             to_extend = items
         corpus_dir = os.path.join(src_data_dir, corpus_name)
-        with open(os.path.join(corpus_dir, "attrs.json")) as inf:
-            corpus_attrs = json.load(inf)
+        try:
+            with open(os.path.join(corpus_dir, "attrs.json")) as inf:
+                corpus_attrs = json.load(inf)
+        except FileNotFoundError:
+            corpus_attrs = {}
 
         if not repr_settings.validate_corpus(corpus_attrs):
             LOGGER.warning(
