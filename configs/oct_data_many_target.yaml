@@ -1,0 +1,25 @@
+features:
+  - chord_factors
+  - chord_tone
+  - harmony_onset
+  - bass_pcs
+  - spelling
+  - primary_degree
+  - primary_alteration
+  - secondary_degree
+  - secondary_alteration
+  - inversion
+  - mode
+  - quality
+  - key_pc
+corpora_to_exclude:
+  - SyntheticData
+  - RenDissData
+# hop=250 and window_len=1000 parameters are taken from musicbert
+hop: 250
+window_len: 1000
+repr_type: oct
+aug_within_range: true
+aug_within_range_n_keys: 12
+# (2023-09-13) aug_rhythms isn't currently working I believe
+aug_rhythms: false
