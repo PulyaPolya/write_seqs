@@ -89,6 +89,9 @@ def main():
 
     targets = seq_settings["features"]
 
+    with open(output_dir / "target_names.json", "w") as outf:
+        json.dump(list(targets), outf)
+
     if os.path.exists(output_dir):
         raise ValueError(f"{output_dir=} exists")
     os.makedirs(output_dir)
