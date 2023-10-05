@@ -43,13 +43,6 @@ class CorpusItem:
     # synthetic: bool = False
 
 
-def vocab_paths(output_folder):
-    return (
-        os.path.join(output_folder, "inputs_vocab.list.{ext}"),
-        os.path.join(output_folder, "targets_{feature_i}_vocab.list.{ext}"),
-    )
-
-
 def get_data_dir(output_folder: str):
     return os.path.join(output_folder, "data")
 
@@ -338,15 +331,23 @@ def write_data(
 def write_vocab(
     src_data_dir: str,
     repr_settings: ReprSettingsBase,
-    inputs_vocab_path: str,
-    targets_vocab_path: str,
+    output_folder: str,
     features: t.Iterable[str],
 ):
+    inputs_vocab_path = os.path.join(output_folder, "inputs_vocab.list.{ext}")
+    targets_vocab_path = os.path.join(
+        output_folder, "targets_{feature_i}_vocab.list.{ext}"
+    )
+    feature_names_path = os.path.join(output_folder, "feature_names.json")
+
     inputs_vocab = repr_settings.inputs_vocab
     with open(inputs_vocab_path.format(ext="pickle"), "wb") as outf:
         pickle.dump(inputs_vocab, outf)
     with open(inputs_vocab_path.format(ext="json"), "w") as outf:
         json.dump(inputs_vocab, outf)
+    with open(feature_names_path, "w") as outf:
+        json.dump(list(features), outf)
+
     missing_vocabs = []
     for feature_i, feature in enumerate(features):
         try:
@@ -397,7 +398,7 @@ def write_datasets_sub(
                 write_vocab(
                     src_data_dir,
                     repr_settings,
-                    *vocab_paths(output_folder),
+                    output_folder,
                     seq_settings.features,
                 )
                 wrote_vocab = True
