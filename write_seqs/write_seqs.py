@@ -38,6 +38,16 @@ class CorpusItem:
             score_path = score_path[0]
         self.score_path = score_path
         self.score_id = attrs.get("score_name", csv_path)
+        self.attrs = attrs
+
+    def read_df(self):
+        labeled_df = pd.read_csv(self.csv_path)
+        labeled_df.attrs["global_key"] = self.attrs.get("global_key", None)
+        labeled_df.attrs["global_key_sig"] = self.attrs.get("global_key_sig", None)
+        labeled_df.attrs["pc_columns"] = self.attrs.get("pc_columns", ())
+        labeled_df.attrs["pitch_columns"] = self.attrs.get("pitch_columns", ("pitch",))
+        labeled_df.attrs["spelled_columns"] = self.attrs.get("spelled_columns", ())
+        return labeled_df
 
     # csv_path: str
     # synthetic: bool = False
@@ -102,7 +112,7 @@ def get_items_from_corpora(
         except FileNotFoundError:
             corpus_attrs = {}
 
-        if not repr_settings.validate_corpus(corpus_attrs):
+        if not repr_settings.validate_corpus(corpus_attrs, corpus_name):
             LOGGER.warning(
                 f"Corpus {corpus_name} was not validated by {repr_settings.__class__.__name__}, skipping it"
             )
@@ -292,7 +302,7 @@ def write_data(
     try:
         init_dirs(output_folder)
         for item in item_iterator(items, verbose):
-            labeled_df = pd.read_csv(item.csv_path)
+            labeled_df = item.read_df()
             # I could augment before or after segmenting df... not entirely sure
             #   which is better. For now I'm putting augmentation first because
             #   then if we use a hop size < window_len we only need to augment
@@ -310,7 +320,9 @@ def write_data(
                         seq_settings.window_len, seq_settings.hop  # type:ignore
                     )
                 ):
-                    feature_segments = [" ".join(segment[f]) for f in features]
+                    feature_segments = [
+                        " ".join(str(x) for x in segment[f]) for f in features
+                    ]
                     print("-\\|/"[i % 4], end="\r", flush=True)
                     write_symbols(
                         csv_chunk_writer,
@@ -448,7 +460,7 @@ def write_datasets(
         repr_setting_cls = MidiLikeSettings
     else:
         raise NotImplementedError()
-    repr_settings = repr_setting_cls(**load_config_from_yaml(repr_settings))
+    repr_settings_inst = repr_setting_cls(**load_config_from_yaml(repr_settings))
     output_folder = os.path.join(get_dataset_base_dir(), output_dir)
     # output_folder = path_from_dataclass(seq_settings)
     # output_folder = path_from_dataclass(
@@ -460,7 +472,7 @@ def write_datasets(
     # )
     print("Chord tones data folder: ", output_folder)
     save_dclass(seq_settings, output_folder)
-    save_dclass(repr_settings, output_folder)
+    save_dclass(repr_settings_inst, output_folder)
     # with open(os.path.join(output_folder, "repr.txt"), "w") as outf:
     #     outf.write(repr_type)
 
@@ -469,7 +481,7 @@ def write_datasets(
         write_datasets_sub(
             src_data_dir=src_data_dir,
             seq_settings=seq_settings,
-            repr_settings=repr_settings,
+            repr_settings=repr_settings_inst,
             splits_todo=splits_todo,
             output_folder=output_folder,
             ratios=ratios,

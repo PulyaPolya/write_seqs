@@ -22,10 +22,13 @@ class SequenceDataSettings:
     window_len: t.Optional[int] = 128
     min_window_len: t.Optional[int] = None
     aug_synthetic_data: bool = False
+    aug_by_key: bool = False
+    aug_by_key_n_keys: int = 12
     aug_within_range: bool = False
     aug_within_range_n_keys: int = 12
     aug_rhythms: bool = False
-    aug_rhythms_n_augs: int = 2
+    aug_rhythms_n_augs: int = 1
+    aug_rhythms_n_possibilities: int = 2
 
     repr_type: t.Literal["oct", "midilike"] = "midilike"
 

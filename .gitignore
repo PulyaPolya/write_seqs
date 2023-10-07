@@ -1,3 +1,4 @@
 venvvars
 build
 tests/temp_out/
+pyrightconfig.json

@@ -19,7 +19,7 @@ corpora_to_exclude:
 hop: 250
 window_len: 1000
 repr_type: oct
-aug_within_range: true
-aug_within_range_n_keys: 12
-# (2023-09-13) aug_rhythms isn't currently working I believe
-aug_rhythms: false
+aug_by_key: true
+aug_by_key_n_keys: 12
+
+aug_rhythms: true
