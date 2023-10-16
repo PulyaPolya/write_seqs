@@ -65,7 +65,11 @@ def main():
             if name in csv_contents.columns
         ]
         metadata_csv = csv_contents[metadata_cols]
-        metadata_csv.to_csv(output_dir / f"metadata_{split}.txt")
+        metadata_path = output_dir / f"metadata_{split}.txt"
+        if metadata_path.exists():
+            metadata_csv.to_csv(metadata_path, mode="a", header=False)
+        else:
+            metadata_csv.to_csv(metadata_path, mode="w", header=True)
 
 
 # The only code past this point should be the call to main()
