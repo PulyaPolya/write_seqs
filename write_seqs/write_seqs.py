@@ -6,14 +6,15 @@ import pickle
 import random
 import typing as t
 from dataclasses import dataclass
+from multiprocessing import Lock, Value
 from numbers import Number
 from pathlib import Path
 
 import pandas as pd
-import yaml  # type:ignore
-from reprs.midi_like import MidiLikeSettings  # type:ignore
-from reprs.oct import OctupleEncodingSettings  # type:ignore
-from reprs.shared import ReprSettingsBase  # type:ignore
+import yaml
+from reprs.midi_like import MidiLikeSettings
+from reprs.oct import OctupleEncodingSettings
+from reprs.shared import ReprSettingsBase
 
 from write_seqs.augmentations import augment
 from write_seqs.settings import SequenceDataSettings, get_dataset_base_dir, save_dclass
@@ -245,11 +246,18 @@ def get_df_attrs(df):
 class CSVChunkWriter:
     """Writes output to CSV file, dividing into chunks of `n_lines_per_chunk`."""
 
-    def __init__(self, path_format_str, header, n_lines_per_chunk=50000):
+    def __init__(
+        self,
+        path_format_str,
+        header,
+        n_lines_per_chunk=50000,
+        shared_file_counter=None,
+    ):
         self._header = header
         self._fmt_str = path_format_str
         self._line_count = 0
         self._chunk_count = 0
+        self._shared_file_counter = shared_file_counter
         self._writer = None
         self._modulo = n_lines_per_chunk - 1
         self._outf = None
@@ -258,8 +266,14 @@ class CSVChunkWriter:
         if self._writer is None or (not self._line_count % self._modulo):
             if self._outf is not None:
                 self._outf.close()
-            self._chunk_count += 1
-            path = self._fmt_str.format(self._chunk_count)
+            if self._shared_file_counter is None:
+                self._chunk_count += 1
+                path = self._fmt_str.format(self._chunk_count)
+            else:
+                self._shared_file_counter.value += 1  # type:ignore
+                path = self._fmt_str.format(
+                    self._shared_file_counter.value  # type:ignore
+                )
             self._outf = open(path, "w", newline="")
             self._writer = csv.writer(self._outf, delimiter=",")
             self._writer.writerow(self._header)
@@ -269,6 +283,58 @@ class CSVChunkWriter:
     def close(self):
         if self._outf is not None:
             self._outf.close()
+
+
+def write_item(
+    item: CorpusItem,
+    seq_settings: SequenceDataSettings,
+    repr_settings: ReprSettingsBase,
+    features: t.Sequence[str],
+    split: str,
+    csv_chunk_writer: CSVChunkWriter,
+):
+    labeled_df = item.read_df()
+    # I could augment before or after segmenting df... not entirely sure
+    #   which is better. For now I'm putting augmentation first because
+    #   then if we use a hop size < window_len we only need to augment
+    #   each note once, rather than many times.
+    for augmented_df in augment(split, labeled_df, seq_settings, item.synthetic):
+        encoded = repr_settings.encode_f(
+            augmented_df, repr_settings, feature_names=features
+        )
+
+        transpose, scaled_by = get_df_attrs(augmented_df)
+        for i, segment in enumerate(
+            encoded.segment(
+                seq_settings.window_len, seq_settings.hop  # type:ignore
+            )
+        ):
+            feature_segments = [" ".join(str(x) for x in segment[f]) for f in features]
+            print("-\\|/"[i % 4], end="\r", flush=True)
+            write_symbols(
+                csv_chunk_writer,
+                item.score_id,
+                item.score_path,
+                item.csv_path,
+                transpose,
+                scaled_by,
+                segment["segment_onset"],  # type:ignore
+                segment["df_indices"],
+                " ".join(segment["input"]),  # type:ignore
+                *feature_segments,
+            )
+
+
+COLUMNS = [
+    "score_id",
+    "score_path",
+    "csv_path",
+    "transpose",
+    "scaled_by",
+    "start_offset",
+    "df_indices",
+    "events",
+]
 
 
 def write_data(
@@ -285,57 +351,14 @@ def write_data(
     format_path = os.path.join(data_dir, "{}.csv")
     os.makedirs(os.path.dirname(format_path), exist_ok=True)
     features = list(seq_settings.features)
-    csv_chunk_writer = CSVChunkWriter(
-        format_path,
-        [
-            "score_id",
-            "score_path",
-            "csv_path",
-            "transpose",
-            "scaled_by",
-            "start_offset",
-            "df_indices",
-            "events",
-        ]
-        + features,
-    )
+    csv_chunk_writer = CSVChunkWriter(format_path, COLUMNS + features)
     try:
         init_dirs(output_folder)
         for item in item_iterator(items, verbose):
-            labeled_df = item.read_df()
-            # I could augment before or after segmenting df... not entirely sure
-            #   which is better. For now I'm putting augmentation first because
-            #   then if we use a hop size < window_len we only need to augment
-            #   each note once, rather than many times.
-            for augmented_df in augment(
-                split, labeled_df, seq_settings, item.synthetic
-            ):
-                encoded = repr_settings.encode_f(
-                    augmented_df, repr_settings, feature_names=features
-                )
+            write_item(
+                item, seq_settings, repr_settings, features, split, csv_chunk_writer
+            )
 
-                transpose, scaled_by = get_df_attrs(augmented_df)
-                for i, segment in enumerate(
-                    encoded.segment(
-                        seq_settings.window_len, seq_settings.hop  # type:ignore
-                    )
-                ):
-                    feature_segments = [
-                        " ".join(str(x) for x in segment[f]) for f in features
-                    ]
-                    print("-\\|/"[i % 4], end="\r", flush=True)
-                    write_symbols(
-                        csv_chunk_writer,
-                        item.score_id,
-                        item.score_path,
-                        item.csv_path,
-                        transpose,
-                        scaled_by,
-                        segment["segment_onset"],  # type:ignore
-                        segment["df_indices"],
-                        " ".join(segment["input"]),  # type:ignore
-                        *feature_segments,
-                    )
     finally:
         csv_chunk_writer.close()
 
