@@ -49,7 +49,6 @@ class Config:
     max_files: int | None = None
     random_files: bool = False
     seed: int = 42
-    # TODO: (Malcolm 2023-10-14) implement multi-processing
     num_workers: int = 8
     regex: str | None = None
     debug: bool = False
