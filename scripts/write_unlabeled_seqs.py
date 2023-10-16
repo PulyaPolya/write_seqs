@@ -44,7 +44,9 @@ class Config:
         default_factory=lambda: OctupleEncodingSettings()
     )
     seq_settings: SequenceDataSettings = field(
-        default_factory=lambda: SequenceDataSettings(features=(), repr_type="oct")
+        default_factory=lambda: SequenceDataSettings(
+            features=(), repr_type="oct", hop=950, window_len=100
+        )
     )
     max_files: int | None = None
     random_files: bool = False
