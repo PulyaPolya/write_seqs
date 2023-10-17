@@ -45,7 +45,7 @@ class Config:
     )
     seq_settings: SequenceDataSettings = field(
         default_factory=lambda: SequenceDataSettings(
-            features=(), repr_type="oct", hop=950, window_len=100
+            features=(), repr_type="oct", hop=950, window_len=1000
         )
     )
     max_files: int | None = None
