@@ -6,6 +6,7 @@ import pickle
 import random
 import typing as t
 from dataclasses import dataclass
+from fractions import Fraction
 from multiprocessing import Lock, Value
 from numbers import Number
 from pathlib import Path
@@ -21,6 +22,17 @@ from write_seqs.settings import SequenceDataSettings, get_dataset_base_dir, save
 from write_seqs.utils.partition import partition
 
 LOGGER = logging.getLogger(__name__)
+
+
+def fraction_to_float(x):
+    if not x:
+        return float("nan")
+    if "/" in x:
+        # Convert fraction to float
+        return float(Fraction(x))
+
+    # Handle the case for integers or other numerical strings
+    return float(x)
 
 
 class CorpusItem:
@@ -42,7 +54,10 @@ class CorpusItem:
         self.attrs = attrs
 
     def read_df(self):
-        labeled_df = pd.read_csv(self.csv_path)
+        labeled_df = pd.read_csv(
+            self.csv_path,
+            converters={"onset": fraction_to_float, "release": fraction_to_float},
+        )
         labeled_df.attrs["global_key"] = self.attrs.get("global_key", None)
         labeled_df.attrs["global_key_sig"] = self.attrs.get("global_key_sig", None)
         labeled_df.attrs["pc_columns"] = self.attrs.get("pc_columns", ())

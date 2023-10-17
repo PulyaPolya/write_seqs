@@ -4,6 +4,7 @@ import os
 import pdb
 import random
 import re
+import shutil
 import sys
 import traceback
 from dataclasses import dataclass, field
@@ -12,7 +13,6 @@ from multiprocessing import Manager, Pool, Value
 
 from omegaconf import OmegaConf
 from reprs.oct import OctupleEncodingSettings
-
 from write_seqs.settings import SequenceDataSettings
 from write_seqs.write_seqs import COLUMNS, CorpusItem, CSVChunkWriter, write_item
 
@@ -54,6 +54,7 @@ class Config:
     num_workers: int = 8
     regex: str | None = None
     debug: bool = False
+    overwrite: bool = False
 
 
 def process_csv(csv_path, config, csv_chunk_writer):
@@ -105,6 +106,9 @@ if __name__ == "__main__":
         random.shuffle(csv_files)
 
     csv_files = csv_files[: config.max_files]
+
+    if config.overwrite and os.path.exists(config.output_folder):
+        shutil.rmtree(config.output_folder)
 
     os.makedirs(config.output_folder, exist_ok=False)
 
