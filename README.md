@@ -2,7 +2,7 @@ Take a corpus of "music_df" and convert to sequences of notes and features.
 
 
 Expects the following format
-- parent directory (e.g., `/Users/malcolm/output/chord_tones_datasets/salami_slice_no_suspensions`) contains
+- parent directory (e.g., `/Users/malcolm/datasets/chord_tones/salami_slice_no_suspensions`) contains
     - optional vocabularies: json files containing lists of strings formatted as `{feature_name}_vocab.json`
         - these can probably be omitted without consequence at the moment; a warning will be emitted.
     - corpora: subfolders (e.g., `ABCData/`) containing:
