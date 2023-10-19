@@ -7,6 +7,7 @@ import random
 import typing as t
 from dataclasses import dataclass
 from fractions import Fraction
+from functools import cached_property
 from multiprocessing import Lock, Value
 from numbers import Number
 from pathlib import Path
@@ -65,6 +66,10 @@ class CorpusItem:
         labeled_df.attrs["spelled_columns"] = self.attrs.get("spelled_columns", ())
         return labeled_df
 
+    @cached_property
+    def file_size(self):
+        return os.path.getsize(self.csv_path)
+
     # csv_path: str
     # synthetic: bool = False
 
@@ -82,7 +87,7 @@ def get_items_from_corpora(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
-) -> t.Tuple[t.List[str], t.List[str]]:
+) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem]]:
     """Returns a pair of lists to paths, `items` and `training_only_items`.
 
     Called by `get_items()` below which returns train/valid/test splits.
@@ -114,19 +119,20 @@ def get_items_from_corpora(
             continue
         if corpus_name in seq_settings.corpora_to_exclude:
             continue
-        if (
-            corpus_name in seq_settings.training_only_corpora
-            and corpus_name not in seq_settings.corpora_to_include
-        ):
-            to_extend = training_only_items
-        else:
-            to_extend = items
         corpus_dir = os.path.join(src_data_dir, corpus_name)
         try:
             with open(os.path.join(corpus_dir, "attrs.json")) as inf:
                 corpus_attrs = json.load(inf)
         except FileNotFoundError:
             corpus_attrs = {}
+
+        if (
+            corpus_name in seq_settings.training_only_corpora
+            and corpus_name not in seq_settings.corpora_to_include
+        ) or corpus_attrs.get("synthetic", False):
+            to_extend = training_only_items
+        else:
+            to_extend = items
 
         if not repr_settings.validate_corpus(corpus_attrs, corpus_name):
             LOGGER.warning(
@@ -144,6 +150,7 @@ def get_items_from_corpora(
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
         to_extend.extend([CorpusItem(csv_path) for csv_path in csv_paths])
+
     return items, training_only_items
 
 
@@ -158,15 +165,6 @@ def get_items(
     # training_only_corpora: t.Sequence[str] = "synthetic",
 ) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
     """Returns lists of paths for files in train, valid, and test splits, respectively."""
-    # We would like to know how many tokens each input file has in order to
-    #   partition the splits as exactly as possible. But that would require
-    #   processing them all first and for various reasons we don't want to do
-    #   that (e.g., we want to apply augmentation to the training data
-    #   in the middle of the processing pipeline). We could use the size of the
-    #   files (as I did in midi_data) as a rough heuristic for how many notes
-    #   they contain but since the file formats are heterogeneous this seems
-    #   unlikely to be reliable. So we just hope the magic of randomness
-    #   will give us a fairly even split.
     if seed is not None:
         random.seed(seed)
     items, training_only_items = get_items_from_corpora(
@@ -175,11 +173,20 @@ def get_items(
     if len(items) * frac < 1:
         raise ValueError(f"{len(items)=} * {frac=} < 1")
     if frac != 1.0:
-        items, _ = partition((frac, 1.0 - frac), items)
-        training_only_items, _ = partition((frac, 1.0 - frac), training_only_items)
-    total_len = len(items) + len(training_only_items)
+        items, _ = partition(
+            (frac, 1.0 - frac), items, [item.file_size for item in items]
+        )
+        training_only_items, _ = partition(
+            (frac, 1.0 - frac),
+            training_only_items,
+            [item.file_size for item in training_only_items],
+        )
+    training_only_size = sum(item.file_size for item in training_only_items)
+    total_size = sum(item.file_size for item in items) + training_only_size
+    # total_len = len(items) + len(training_only_items)
 
-    training_only_prop = len(training_only_items) / total_len
+    # training_only_prop = len(training_only_items) / total_len
+    training_only_prop = training_only_size / total_size
     if training_only_prop >= proportions[0]:
         LOGGER.warning(f"training set will contain *only* training_only_corpora")
     adjusted_proportions = (max(proportions[0] - training_only_prop, 0),) + proportions[
@@ -188,7 +195,9 @@ def get_items(
     adjusted_proportions = tuple(
         prop / sum(adjusted_proportions) for prop in adjusted_proportions
     )
-    train_items, valid_items, test_items = partition(adjusted_proportions, items)
+    train_items, valid_items, test_items = partition(
+        adjusted_proportions, items, [item.file_size for item in items]
+    )
     train_items.extend(training_only_items)
     return train_items, valid_items, test_items
 
