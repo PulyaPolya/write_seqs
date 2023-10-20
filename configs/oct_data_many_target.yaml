@@ -15,6 +15,7 @@ features:
 corpora_to_exclude:
   - SyntheticData
   - RenDissData
+  - RNCollageData
 # hop=250 and window_len=1000 parameters are taken from musicbert
 hop: 250
 window_len: 1000
