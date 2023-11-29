@@ -178,7 +178,7 @@ def get_items(
         src_data_dir, seq_settings, repr_settings
     )
     if len(items) * frac < 1:
-        raise ValueError(f"{len(items)=} * {frac=} < 1")
+        raise ValueError(f"{src_data_dir=} {len(items)=} * {frac=} < 1")
     if frac != 1.0:
         # Get a random subset of all items
         items, _ = partition(
