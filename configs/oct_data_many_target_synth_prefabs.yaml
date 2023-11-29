@@ -3,7 +3,6 @@ features:
   - chord_tone
   - harmony_onset
   - bass_pcs
-  - spelling
   - primary_degree
   - primary_alteration
   - secondary_degree
@@ -14,6 +13,8 @@ features:
   - key_pc
 corpora_to_exclude:
   - RenDissData
+synthetic_corpora_to_include:
+  - DumbComposerPrefabsData
 # hop=250 and window_len=1000 parameters are taken from musicbert
 hop: 250
 window_len: 1000

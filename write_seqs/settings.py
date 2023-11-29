@@ -35,7 +35,11 @@ class SequenceDataSettings:
     dataset_name: t.Optional[str] = None
 
     corpora_to_exclude: t.Sequence[str] = ()
+    # corpora_to_include is ignored if it is empty, otherwise it takes
+    #   precedence over corpora_to_sclude
     corpora_to_include: t.Sequence[str] = ()
+    # synthetic corpora must be explicitly included, otherwise they are excluded
+    synthetic_corpora_to_include: t.Sequence[str] = ()
     training_only_corpora: t.Union[str, t.Sequence[str]] = "SyntheticData"
     corpora_sample_proportions: t.Dict[str, float] = field(
         default_factory=lambda: {"RenDissData": 0.1}

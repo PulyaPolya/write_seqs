@@ -29,12 +29,19 @@ def test_write_datasets_minimal(repr_type):
     )
 
 
-def test_write_datasets():
+@pytest.mark.parametrize(
+    "settings_yaml",
+    [
+        "chord_tones_data_settings.yaml",
+        "oct_data_many_target_with_synth.yaml",
+    ],
+)
+def test_write_datasets(settings_yaml):
     # Note the `mock_env_user()` autouse fixture in conftest.py sets the output dir
     #   according to whether --keep-files cli arg is provided
     assert SRC_DATA_DIR is not None
     random.seed(42)
-    seq_settings_path = CONFIG_DIR / "chord_tones_data_settings.yaml"
+    seq_settings_path = CONFIG_DIR / settings_yaml
     write_datasets(
         SRC_DATA_DIR, "scratch", None, seq_settings_path, overwrite=True, frac=0.005
     )

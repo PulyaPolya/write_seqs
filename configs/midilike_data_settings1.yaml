@@ -1,5 +1,4 @@
 corpora_to_exclude:
-  - SyntheticData
   - RenDissData
 hop: 8
 window_len: 128

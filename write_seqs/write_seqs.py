@@ -111,10 +111,10 @@ def get_items_from_corpora(
     items = []
 
     for corpus_name in corpora:
-        print(corpus_name)
         if (
             seq_settings.corpora_to_include
             and corpus_name not in seq_settings.corpora_to_include
+            and corpus_name not in seq_settings.synthetic_corpora_to_include
         ):
             continue
         if corpus_name in seq_settings.corpora_to_exclude:
@@ -125,6 +125,12 @@ def get_items_from_corpora(
                 corpus_attrs = json.load(inf)
         except FileNotFoundError:
             corpus_attrs = {}
+
+        if (
+            corpus_attrs.get("synthetic")
+            and corpus_name not in seq_settings.synthetic_corpora_to_include
+        ):
+            continue
 
         if (
             corpus_name in seq_settings.training_only_corpora
@@ -161,6 +167,7 @@ def get_items(
     seed: t.Optional[int] = None,
     proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
+    proportions_exclude_training_only_items: bool = True
     # corpora_to_exclude: t.Sequence[str] = (),
     # training_only_corpora: t.Sequence[str] = "synthetic",
 ) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
@@ -173,6 +180,7 @@ def get_items(
     if len(items) * frac < 1:
         raise ValueError(f"{len(items)=} * {frac=} < 1")
     if frac != 1.0:
+        # Get a random subset of all items
         items, _ = partition(
             (frac, 1.0 - frac), items, [item.file_size for item in items]
         )
@@ -181,23 +189,27 @@ def get_items(
             training_only_items,
             [item.file_size for item in training_only_items],
         )
-    training_only_size = sum(item.file_size for item in training_only_items)
-    total_size = sum(item.file_size for item in items) + training_only_size
-    # total_len = len(items) + len(training_only_items)
 
-    # training_only_prop = len(training_only_items) / total_len
-    training_only_prop = training_only_size / total_size
-    if training_only_prop >= proportions[0]:
-        LOGGER.warning(f"training set will contain *only* training_only_corpora")
-    adjusted_proportions = (max(proportions[0] - training_only_prop, 0),) + proportions[
-        1:
-    ]
-    adjusted_proportions = tuple(
-        prop / sum(adjusted_proportions) for prop in adjusted_proportions
-    )
-    train_items, valid_items, test_items = partition(
-        adjusted_proportions, items, [item.file_size for item in items]
-    )
+    if proportions_exclude_training_only_items:
+        train_items, valid_items, test_items = partition(
+            proportions, items, [item.file_size for item in items]
+        )
+    else:
+        training_only_size = sum(item.file_size for item in training_only_items)
+        total_size = sum(item.file_size for item in items) + training_only_size
+        training_only_prop = training_only_size / total_size
+        if training_only_prop >= proportions[0]:
+            LOGGER.warning(f"training set will contain *only* training_only_corpora")
+        adjusted_proportions = (
+            max(proportions[0] - training_only_prop, 0),
+        ) + proportions[1:]
+        adjusted_proportions = tuple(
+            prop / sum(adjusted_proportions) for prop in adjusted_proportions
+        )
+        train_items, valid_items, test_items = partition(
+            adjusted_proportions, items, [item.file_size for item in items]
+        )
+
     train_items.extend(training_only_items)
     return train_items, valid_items, test_items
 
