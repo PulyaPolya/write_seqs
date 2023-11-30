@@ -69,12 +69,3 @@ def partition(
     return tuple(
         items[start:stop] for (start, stop) in zip([0] + boundaries, boundaries)
     )
-
-    breakpoint()
-
-    int_ratios = [int(round(x * len(items))) for x in proportions]
-    boundaries = list(it.accumulate(int_ratios))
-    boundaries[-1] = len(items)  # just in case it has been rounded down
-    return tuple(
-        items[start:stop] for (start, stop) in zip([0] + boundaries, boundaries)
-    )

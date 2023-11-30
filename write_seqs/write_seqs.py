@@ -5,11 +5,9 @@ import os
 import pickle
 import random
 import typing as t
-from dataclasses import dataclass
 from fractions import Fraction
 from functools import cached_property
 from multiprocessing import Lock, Value
-from numbers import Number
 from pathlib import Path
 
 import pandas as pd
@@ -157,6 +155,10 @@ def get_items_from_corpora(
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
         to_extend.extend([CorpusItem(csv_path) for csv_path in csv_paths])
 
+    # We sort to be sure that the result will be stable
+    items = sorted(items, key=lambda x: x.csv_path)
+    training_only_items = sorted(training_only_items, key=lambda x: x.csv_path)
+
     return items, training_only_items
 
 
@@ -164,7 +166,7 @@ def get_items(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
-    seed: t.Optional[int] = None,
+    seed: t.Optional[int] = 42,
     proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
     proportions_exclude_training_only_items: bool = True
@@ -177,9 +179,14 @@ def get_items(
     items, training_only_items = get_items_from_corpora(
         src_data_dir, seq_settings, repr_settings
     )
+
+    # I was using this to verify that result was the same across runs:
+    # for x in (items, training_only_items):
+    #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
+
     if len(items) * frac < 1:
         raise ValueError(f"{src_data_dir=} {len(items)=} * {frac=} < 1")
-    if frac != 1.0:
+    if frac < 1.0:
         # Get a random subset of all items
         items, _ = partition(
             (frac, 1.0 - frac), items, [item.file_size for item in items]
@@ -462,6 +469,10 @@ def write_datasets_sub(
         proportions=ratios,
         frac=frac,
     )
+    # I was using this to verify that result was the same across runs:
+    # for x in items_tup:
+    #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
+
     wrote_vocab = False
     for items, (split, todo) in zip(items_tup, splits_todo.items()):
         if todo:
