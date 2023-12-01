@@ -1,4 +1,5 @@
 import csv
+import hashlib
 import json
 import logging
 import os
@@ -67,6 +68,23 @@ class CorpusItem:
     @cached_property
     def file_size(self):
         return os.path.getsize(self.csv_path)
+
+    @cached_property
+    def int_hash(self):
+        """
+
+        >>> corpus_item = CorpusItem("/foo/bar/fake_path.csv")
+        >>> corpus_item.int_hash
+        126421193881301213808030691522801815677
+        >>> same_corpus_item = CorpusItem("/foo/bar/fake_path.csv")
+        >>> same_corpus_item.int_hash
+        126421193881301213808030691522801815677
+        >>> diff_corpus_item = CorpusItem("/foo/bar/other_path.csv")
+        >>> diff_corpus_item.int_hash
+        78042759248307369719732645949625633696
+        """
+        # This allows us to make certain behavior deterministic
+        return int(hashlib.md5(self.csv_path.encode()).hexdigest(), 16)
 
     # csv_path: str
     # synthetic: bool = False
@@ -345,12 +363,16 @@ def write_item(
         encoded = repr_settings.encode_f(
             augmented_df, repr_settings, feature_names=features
         )
+        # (Malcolm 2023-12-01) We use the int hash to set the start offset in a
+        #   deterministic way. However, it will be the same for every augmentation.
+        #   It would be nice to make a different, but deterministic, hash for
+        #   every augmentation.
+        assert seq_settings.window_len is not None
+        start_i = 0 - item.int_hash % seq_settings.window_len
 
         transpose, scaled_by = get_df_attrs(augmented_df)
         for i, segment in enumerate(
-            encoded.segment(
-                seq_settings.window_len, seq_settings.hop  # type:ignore
-            )
+            encoded.segment(seq_settings.window_len, seq_settings.hop, start_i=start_i)
         ):
             feature_segments = [" ".join(str(x) for x in segment[f]) for f in features]
             print("-\\|/"[i % 4], end="\r", flush=True)
