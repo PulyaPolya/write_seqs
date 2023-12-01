@@ -166,7 +166,7 @@ def get_items(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
-    seed: t.Optional[int] = 42,
+    # seed: t.Optional[int] = 42,
     proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
     proportions_exclude_training_only_items: bool = True
@@ -174,8 +174,8 @@ def get_items(
     # training_only_corpora: t.Sequence[str] = "synthetic",
 ) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
     """Returns lists of paths for files in train, valid, and test splits, respectively."""
-    if seed is not None:
-        random.seed(seed)
+    if seq_settings.split_seed is not None:
+        random.seed(seq_settings.split_seed)
     items, training_only_items = get_items_from_corpora(
         src_data_dir, seq_settings, repr_settings
     )

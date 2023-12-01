@@ -44,6 +44,7 @@ class SequenceDataSettings:
     corpora_sample_proportions: t.Dict[str, float] = field(
         default_factory=lambda: {"RenDissData": 0.1}
     )
+    split_seed: t.Optional[int] = 42
 
     def __post_init__(self):
         if isinstance(self.features, str):
