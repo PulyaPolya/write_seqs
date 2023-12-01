@@ -1,0 +1,25 @@
+features:
+  - chord_factors
+  - chord_tone
+  - harmony_onset
+  - bass_pcs
+  - spelling
+  - primary_degree
+  - primary_alteration
+  - secondary_degree
+  - secondary_alteration
+  - inversion
+  - mode
+  - quality
+  - key_pc
+corpora_to_exclude:
+  - RenDissData
+# hop=250 and window_len=1000 parameters are taken from musicbert
+hop: 250
+window_len: 1000
+repr_type: oct
+aug_by_key: true
+aug_by_key_n_keys: 12
+
+aug_rhythms: true
+split_seed: 8
