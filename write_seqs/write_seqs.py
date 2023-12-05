@@ -6,6 +6,7 @@ import os
 import pickle
 import random
 import typing as t
+from collections import defaultdict
 from fractions import Fraction
 from functools import cached_property
 from multiprocessing import Lock, Value
@@ -23,6 +24,8 @@ from write_seqs.utils.partition import partition
 
 LOGGER = logging.getLogger(__name__)
 
+# TODO: (Malcolm 2023-12-05) clean up comments throughout
+
 
 def fraction_to_float(x):
     if not x:
@@ -36,7 +39,7 @@ def fraction_to_float(x):
 
 
 class CorpusItem:
-    def __init__(self, csv_path):
+    def __init__(self, csv_path: str, corpus_name: str | None = None):
         json_path = csv_path[:-3] + "json"
         try:
             with open(json_path) as inf:
@@ -52,6 +55,7 @@ class CorpusItem:
         self.score_path = score_path
         self.score_id = attrs.get("score_name", csv_path)
         self.attrs = attrs
+        self.corpus_name = corpus_name
 
     def read_df(self):
         labeled_df = pd.read_csv(
@@ -99,11 +103,15 @@ def get_split_dir(output_folder: str, split: str) -> str:
     return input_path
 
 
-def get_items_from_corpora(
+def _get_items_from_corpora(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
-    repr_settings: ReprSettingsBase,
-) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem]]:
+    repr_settings: ReprSettingsBase | None,
+    output_format: t.Literal["flat_list", "dict_by_corpus"] = "flat_list",
+) -> (
+    tuple[list[CorpusItem], list[CorpusItem]]
+    | tuple[dict[str, list[CorpusItem]], list[CorpusItem]]
+):
     """Returns a pair of lists to paths, `items` and `training_only_items`.
 
     Called by `get_items()` below which returns train/valid/test splits.
@@ -124,9 +132,14 @@ def get_items_from_corpora(
                 f"Valid corpora include {corpora}"
             )
     training_only_items = []
-    items = []
 
-    for corpus_name in corpora:
+    if output_format == "flat_list":
+        items = []
+    else:
+        items = defaultdict(list)
+
+    # We sort corpora to make output stable
+    for corpus_name in sorted(corpora):
         if (
             seq_settings.corpora_to_include
             and corpus_name not in seq_settings.corpora_to_include
@@ -154,9 +167,16 @@ def get_items_from_corpora(
         ) or corpus_attrs.get("synthetic", False):
             to_extend = training_only_items
         else:
-            to_extend = items
+            if output_format == "flat_list":
+                assert isinstance(items, list)
+                to_extend = items
+            else:
+                assert isinstance(items, dict)
+                to_extend = items[corpus_name]
 
-        if not repr_settings.validate_corpus(corpus_attrs, corpus_name):
+        if repr_settings is not None and not repr_settings.validate_corpus(
+            corpus_attrs, corpus_name
+        ):
             LOGGER.warning(
                 f"Corpus {corpus_name} was not validated by {repr_settings.__class__.__name__}, skipping it"
             )
@@ -171,55 +191,81 @@ def get_items_from_corpora(
             is not None
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
-        to_extend.extend([CorpusItem(csv_path) for csv_path in csv_paths])
+        to_extend.extend([CorpusItem(csv_path, corpus_name) for csv_path in csv_paths])
+        # if output_format == "flat_list":
+        #     assert isinstance(to_extend, list)
+        #     to_extend.extend([CorpusItem(csv_path) for csv_path in csv_paths])
+        # else:
+        #     assert isinstance(to_extend, dict)
+        #     to_extend[corpus_name].extend(
+        #         [CorpusItem(csv_path) for csv_path in csv_paths]
+        #     )
 
-    # We sort to be sure that the result will be stable
-    items = sorted(items, key=lambda x: x.csv_path)
     training_only_items = sorted(training_only_items, key=lambda x: x.csv_path)
+    # We sort to be sure that the result will be stable
+    if output_format == "flat_list":
+        assert isinstance(items, list)
+        items = sorted(items, key=lambda x: x.csv_path)
+        return items, training_only_items
 
-    return items, training_only_items
+    else:
+        assert isinstance(items, dict)
+        for corpus_name in corpora:
+            items[corpus_name] = sorted(items[corpus_name], key=lambda x: x.csv_path)
+        return items, training_only_items
 
 
-def get_items(
+def get_items_by_corpora(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
-    repr_settings: ReprSettingsBase,
-    # seed: t.Optional[int] = 42,
+    repr_settings: ReprSettingsBase | None,
+) -> tuple[dict[str, list[CorpusItem]], list[CorpusItem]]:
+    out = _get_items_from_corpora(
+        src_data_dir, seq_settings, repr_settings, output_format="dict_by_corpus"
+    )
+    assert isinstance(out[0], dict) and isinstance(out[1], list)
+    return out  # type:ignore
+
+
+def get_items_from_corpora(
+    src_data_dir: str,
+    seq_settings: SequenceDataSettings,
+    repr_settings: ReprSettingsBase | None,
+) -> tuple[list[CorpusItem], list[CorpusItem]]:
+    out = _get_items_from_corpora(
+        src_data_dir, seq_settings, repr_settings, output_format="flat_list"
+    )
+    assert isinstance(out[0], list) and isinstance(out[1], list)
+    return out  # type:ignore
+
+
+def handle_partition(
+    items: list[CorpusItem],
+    training_only_items: list[CorpusItem] | None = None,
     proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
-    proportions_exclude_training_only_items: bool = True
-    # corpora_to_exclude: t.Sequence[str] = (),
-    # training_only_corpora: t.Sequence[str] = "synthetic",
-) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
-    """Returns lists of paths for files in train, valid, and test splits, respectively."""
-    if seq_settings.split_seed is not None:
-        random.seed(seq_settings.split_seed)
-    items, training_only_items = get_items_from_corpora(
-        src_data_dir, seq_settings, repr_settings
-    )
-
-    # I was using this to verify that result was the same across runs:
-    # for x in (items, training_only_items):
-    #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
-
-    if len(items) * frac < 1:
-        raise ValueError(f"{src_data_dir=} {len(items)=} * {frac=} < 1")
+    proportions_exclude_training_only_items: bool = True,
+) -> tuple[
+    list[CorpusItem], list[CorpusItem], list[CorpusItem], list[CorpusItem] | None
+]:
     if frac < 1.0:
         # Get a random subset of all items
         items, _ = partition(
             (frac, 1.0 - frac), items, [item.file_size for item in items]
         )
-        training_only_items, _ = partition(
-            (frac, 1.0 - frac),
-            training_only_items,
-            [item.file_size for item in training_only_items],
-        )
+        if training_only_items is not None:
+            training_only_items, _ = partition(
+                (frac, 1.0 - frac),
+                training_only_items,
+                [item.file_size for item in training_only_items],
+            )
 
     if proportions_exclude_training_only_items:
         train_items, valid_items, test_items = partition(
             proportions, items, [item.file_size for item in items]
         )
     else:
+        assert training_only_items is not None
         training_only_size = sum(item.file_size for item in training_only_items)
         total_size = sum(item.file_size for item in items) + training_only_size
         training_only_prop = training_only_size / total_size
@@ -234,6 +280,102 @@ def get_items(
         train_items, valid_items, test_items = partition(
             adjusted_proportions, items, [item.file_size for item in items]
         )
+    return train_items, valid_items, test_items, training_only_items
+
+
+def get_items(
+    src_data_dir: str,
+    seq_settings: SequenceDataSettings,
+    repr_settings: ReprSettingsBase | None,
+    # seed: t.Optional[int] = 42,
+    proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
+    frac: float = 1.0,
+    # corpora_to_exclude: t.Sequence[str] = (),
+    # training_only_corpora: t.Sequence[str] = "synthetic",
+) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
+    """Returns lists of paths for files in train, valid, and test splits, respectively."""
+    if seq_settings.split_seed is not None:
+        random.seed(seq_settings.split_seed)
+    if seq_settings.split_by_corpora:
+        if not seq_settings.proportions_exclude_training_only_items:
+            raise NotImplementedError
+        # TODO: (Malcolm 2023-12-05) rename get_items_by_corpora and get_items_from_corpora
+        items, training_only_items = get_items_by_corpora(
+            src_data_dir, seq_settings, repr_settings
+        )
+        training_only_items, _ = partition(
+            (frac, 1.0 - frac),
+            training_only_items,
+            [item.file_size for item in training_only_items],
+        )
+
+        len_items = sum(len(sub_items) for sub_items in items.values())
+        if len_items * frac < 1:
+            raise ValueError(f"{src_data_dir=} {len_items=} * {frac=} < 1")
+        train_items = []
+        valid_items = []
+        test_items = []
+
+        for corpus_name in items:
+            c_train_items, c_valid_items, c_test_items, _ = handle_partition(
+                items[corpus_name],
+                proportions=proportions,
+                frac=frac,
+                proportions_exclude_training_only_items=True,
+            )
+            train_items.extend(c_train_items)
+            valid_items.extend(c_valid_items)
+            test_items.extend(c_test_items)
+
+    else:
+        items, training_only_items = get_items_from_corpora(
+            src_data_dir, seq_settings, repr_settings
+        )
+
+        # I was using this to verify that result was the same across runs:
+        # for x in (items, training_only_items):
+        #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
+
+        if len(items) * frac < 1:
+            raise ValueError(f"{src_data_dir=} {len(items)=} * {frac=} < 1")
+        train_items, valid_items, test_items, training_only_items = handle_partition(
+            items,
+            training_only_items=training_only_items,
+            proportions=proportions,
+            frac=frac,
+            proportions_exclude_training_only_items=seq_settings.proportions_exclude_training_only_items,
+        )
+        assert training_only_items is not None
+    # if frac < 1.0:
+    #     # Get a random subset of all items
+    #     items, _ = partition(
+    #         (frac, 1.0 - frac), items, [item.file_size for item in items]
+    #     )
+    #     training_only_items, _ = partition(
+    #         (frac, 1.0 - frac),
+    #         training_only_items,
+    #         [item.file_size for item in training_only_items],
+    #     )
+
+    # if proportions_exclude_training_only_items:
+    #     train_items, valid_items, test_items = partition(
+    #         proportions, items, [item.file_size for item in items]
+    #     )
+    # else:
+    #     training_only_size = sum(item.file_size for item in training_only_items)
+    #     total_size = sum(item.file_size for item in items) + training_only_size
+    #     training_only_prop = training_only_size / total_size
+    #     if training_only_prop >= proportions[0]:
+    #         LOGGER.warning(f"training set will contain *only* training_only_corpora")
+    #     adjusted_proportions = (
+    #         max(proportions[0] - training_only_prop, 0),
+    #     ) + proportions[1:]
+    #     adjusted_proportions = tuple(
+    #         prop / sum(adjusted_proportions) for prop in adjusted_proportions
+    #     )
+    #     train_items, valid_items, test_items = partition(
+    #         adjusted_proportions, items, [item.file_size for item in items]
+    #     )
 
     train_items.extend(training_only_items)
     return train_items, valid_items, test_items

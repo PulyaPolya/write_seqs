@@ -40,11 +40,13 @@ class SequenceDataSettings:
     corpora_to_include: t.Sequence[str] = ()
     # synthetic corpora must be explicitly included, otherwise they are excluded
     synthetic_corpora_to_include: t.Sequence[str] = ()
-    training_only_corpora: t.Union[str, t.Sequence[str]] = "SyntheticData"
+    training_only_corpora: t.Union[str, t.Sequence[str]] = ()
     corpora_sample_proportions: t.Dict[str, float] = field(
         default_factory=lambda: {"RenDissData": 0.1}
     )
     split_seed: t.Optional[int] = 42
+    split_by_corpora: bool = True
+    proportions_exclude_training_only_items: bool = True
 
     def __post_init__(self):
         if isinstance(self.features, str):

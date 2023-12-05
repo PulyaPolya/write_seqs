@@ -17,13 +17,15 @@ from bisect import bisect_right
 #         items[start:stop] for (start, stop) in zip([0] + boundaries, boundaries)
 #     )
 
+T = t.TypeVar("T")
+
 
 def partition(
     proportions: t.Sequence[float],
-    items: t.List[t.Any],
+    items: t.List[T],
     item_lengths: t.List[int | float],
     shuffle: bool = True,
-) -> t.Tuple[t.List[t.Any], ...]:
+) -> t.Tuple[t.List[T], ...]:
     """`items` is shuffled in-place.
     >>> items = list(range(10))
     >>> item_lengths = [2] * 8 + [8] * 2
