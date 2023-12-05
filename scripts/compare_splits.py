@@ -18,6 +18,7 @@ def parse_args():
         "--output-dir",
         default="/Users/malcolm/Dropbox/Yale_Stuff/dissertation/supporting_files/latex_tables",
     )
+    parser.add_argument("--dont-split-by-corpora", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -27,7 +28,9 @@ N_SEEDS = 100
 
 def main():
     args = parse_args()
-    seq_settings = SequenceDataSettings(features=["dummy"])
+    seq_settings = SequenceDataSettings(
+        features=["dummy"], split_by_corpora=not args.dont_split_by_corpora
+    )
     score_results = []
     size_results = []
     for seed in range(42, 42 + N_SEEDS):
@@ -42,8 +45,8 @@ def main():
             sizes = Counter()
             for c in split:
                 sizes[c.corpus_name] += c.file_size
-            counts["total"] = sum(counts.values())
-            sizes["total"] = sum(sizes.values())
+            # counts["total"] = sum(counts.values())
+            # sizes["total"] = sum(sizes.values())
             score_counts[f"{split_name}_counts_{seed}"] = counts
             total_sizes[f"{split_name}_sizes_{seed}"] = sizes
 
@@ -53,7 +56,9 @@ def main():
             for col in df.columns:
                 df[col] = df[col].astype(int)
             df.iloc[:, :] = df.values / df.values.sum(axis=1, keepdims=True)
-            df.loc["mean"] = df.values[:-1].mean(axis=0)
+            df = df.sort_index()
+            df.loc["Total"] = df.values.sum(axis=0)
+            df.loc["Mean"] = df.values[:-1].mean(axis=0)
             return df
 
         score_df = _get_df(score_counts)
@@ -69,14 +74,14 @@ def main():
         means_df.loc[:, :] = means
         # Underscores cause latex output with pandoc to fail
         means_df.columns = [
-            col.rsplit("_", maxsplit=1)[0].replace("_", "") + " mean"
+            col.rsplit("_", maxsplit=1)[0].replace("_", " ").capitalize() + " mean"
             for col in means_df.columns
         ]
         stds = arr.std(axis=0)
         stds_df = results[0].copy()
         stds_df.loc[:, :] = stds
         stds_df.columns = [
-            col.rsplit("_", maxsplit=1)[0].replace("_", "") + " std"
+            col.rsplit("_", maxsplit=1)[0].replace("_", " ").capitalize() + " std"
             for col in stds_df.columns
         ]
         return means_df, stds_df
@@ -88,17 +93,20 @@ def main():
     print(size_means)
     print(size_stds)
     if args.output_dir is not None:
+        info_str = "by_all" if args.dont_split_by_corpora else "by_corpus"
         score_means.to_latex(
-            os.path.join(args.output_dir, f"{N_SEEDS}_splits_score_means.tex")
+            os.path.join(
+                args.output_dir, f"{N_SEEDS}_splits_{info_str}_score_means.tex"
+            )
         )
         score_stds.to_latex(
-            os.path.join(args.output_dir, f"{N_SEEDS}_splits_score_stds.tex")
+            os.path.join(args.output_dir, f"{N_SEEDS}_splits_{info_str}_score_stds.tex")
         )
         size_means.to_latex(
-            os.path.join(args.output_dir, f"{N_SEEDS}_splits_size_means.tex")
+            os.path.join(args.output_dir, f"{N_SEEDS}_splits_{info_str}_size_means.tex")
         )
         size_stds.to_latex(
-            os.path.join(args.output_dir, f"{N_SEEDS}_splits_size_stds.tex")
+            os.path.join(args.output_dir, f"{N_SEEDS}_splits_{info_str}_size_stds.tex")
         )
         print("Saved output to ", args.output_dir)
 

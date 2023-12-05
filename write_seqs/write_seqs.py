@@ -215,7 +215,7 @@ def _get_items_from_corpora(
         return items, training_only_items
 
 
-def get_items_by_corpora(
+def get_items_within_corpora(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase | None,
@@ -227,7 +227,7 @@ def get_items_by_corpora(
     return out  # type:ignore
 
 
-def get_items_from_corpora(
+def get_items_across_corpora(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase | None,
@@ -287,11 +287,8 @@ def get_items(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase | None,
-    # seed: t.Optional[int] = 42,
     proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
-    # corpora_to_exclude: t.Sequence[str] = (),
-    # training_only_corpora: t.Sequence[str] = "synthetic",
 ) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
     """Returns lists of paths for files in train, valid, and test splits, respectively."""
     if seq_settings.split_seed is not None:
@@ -299,8 +296,7 @@ def get_items(
     if seq_settings.split_by_corpora:
         if not seq_settings.proportions_exclude_training_only_items:
             raise NotImplementedError
-        # TODO: (Malcolm 2023-12-05) rename get_items_by_corpora and get_items_from_corpora
-        items, training_only_items = get_items_by_corpora(
+        items, training_only_items = get_items_within_corpora(
             src_data_dir, seq_settings, repr_settings
         )
         training_only_items, _ = partition(
@@ -328,7 +324,7 @@ def get_items(
             test_items.extend(c_test_items)
 
     else:
-        items, training_only_items = get_items_from_corpora(
+        items, training_only_items = get_items_across_corpora(
             src_data_dir, seq_settings, repr_settings
         )
 
@@ -346,36 +342,6 @@ def get_items(
             proportions_exclude_training_only_items=seq_settings.proportions_exclude_training_only_items,
         )
         assert training_only_items is not None
-    # if frac < 1.0:
-    #     # Get a random subset of all items
-    #     items, _ = partition(
-    #         (frac, 1.0 - frac), items, [item.file_size for item in items]
-    #     )
-    #     training_only_items, _ = partition(
-    #         (frac, 1.0 - frac),
-    #         training_only_items,
-    #         [item.file_size for item in training_only_items],
-    #     )
-
-    # if proportions_exclude_training_only_items:
-    #     train_items, valid_items, test_items = partition(
-    #         proportions, items, [item.file_size for item in items]
-    #     )
-    # else:
-    #     training_only_size = sum(item.file_size for item in training_only_items)
-    #     total_size = sum(item.file_size for item in items) + training_only_size
-    #     training_only_prop = training_only_size / total_size
-    #     if training_only_prop >= proportions[0]:
-    #         LOGGER.warning(f"training set will contain *only* training_only_corpora")
-    #     adjusted_proportions = (
-    #         max(proportions[0] - training_only_prop, 0),
-    #     ) + proportions[1:]
-    #     adjusted_proportions = tuple(
-    #         prop / sum(adjusted_proportions) for prop in adjusted_proportions
-    #     )
-    #     train_items, valid_items, test_items = partition(
-    #         adjusted_proportions, items, [item.file_size for item in items]
-    #     )
 
     train_items.extend(training_only_items)
     return train_items, valid_items, test_items
@@ -393,47 +359,6 @@ def item_iterator(items: t.List[CorpusItem], verbose: bool) -> t.Iterator[Corpus
             yield item
     else:
         yield from items
-
-
-# # TODO: (Malcolm 2023-09-14) I think this function may be unused, in which case I should
-# #   remove it
-# def segment_iter(
-#     df: pd.DataFrame,
-#     window_len: int,
-#     hop: t.Optional[int],
-#     window_len_jitter: t.Optional[int] = None,
-#     hop_jitter: t.Optional[int] = None,
-#     min_window_len: t.Optional[int] = None,
-# ) -> t.Iterator[pd.DataFrame]:
-#     """
-#     Segments data frames, optionally applying jitter.
-#     """
-#     if min_window_len is None:
-#         min_window_len = window_len // 2
-#     else:
-#         assert min_window_len <= window_len
-#     if window_len_jitter is None:
-#         this_window_len = window_len
-#     else:
-#         window_len_l_bound = max(window_len - window_len_jitter, min_window_len)
-#         window_len_u_bound = window_len + window_len_jitter + 1
-#     if hop_jitter is None:
-#         this_hop = hop
-#     else:
-#         assert hop is not None
-#         hop_l_bound = max(1, hop - hop_jitter)
-#         hop_u_bound = hop + hop_jitter + 1
-#     start_i = 0
-#     while start_i < len(df) - min_window_len:
-#         if window_len_jitter is not None:
-#             this_window_len = random.randint(
-#                 window_len_l_bound, window_len_u_bound  # type:ignore
-#             )
-#         if hop_jitter is not None:
-#             this_hop = random.randint(hop_l_bound, hop_u_bound)  # type:ignore
-#         end_i = start_i + this_window_len  # type:ignore
-#         yield df.iloc[start_i:end_i]
-#         start_i += this_hop  # type:ignore
 
 
 def write_symbols(writer, *symbols):
@@ -696,19 +621,10 @@ def write_datasets(
         raise NotImplementedError()
     repr_settings_inst = repr_setting_cls(**load_config_from_yaml(repr_settings))
     output_folder = os.path.join(get_dataset_base_dir(), output_dir)
-    # output_folder = path_from_dataclass(seq_settings)
-    # output_folder = path_from_dataclass(
-    #     repr_settings,
-    #     base_dir=output_folder,
-    #     ratios=ratios,
-    #     frac=frac,
-    #     **path_kwargs,
-    # )
+
     print("Chord tones data folder: ", output_folder)
     save_dclass(seq_settings, output_folder)
     save_dclass(repr_settings_inst, output_folder)
-    # with open(os.path.join(output_folder, "repr.txt"), "w") as outf:
-    #     outf.write(repr_type)
 
     splits_todo = check_if_splits_exist(output_folder, overwrite)
     if any(splits_todo.values()):
