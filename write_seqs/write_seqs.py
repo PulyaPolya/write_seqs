@@ -24,8 +24,6 @@ from write_seqs.utils.partition import partition
 
 LOGGER = logging.getLogger(__name__)
 
-# TODO: (Malcolm 2023-12-05) clean up comments throughout
-
 
 def fraction_to_float(x):
     if not x:
@@ -192,14 +190,6 @@ def _get_items_from_corpora(
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
         to_extend.extend([CorpusItem(csv_path, corpus_name) for csv_path in csv_paths])
-        # if output_format == "flat_list":
-        #     assert isinstance(to_extend, list)
-        #     to_extend.extend([CorpusItem(csv_path) for csv_path in csv_paths])
-        # else:
-        #     assert isinstance(to_extend, dict)
-        #     to_extend[corpus_name].extend(
-        #         [CorpusItem(csv_path) for csv_path in csv_paths]
-        #     )
 
     training_only_items = sorted(training_only_items, key=lambda x: x.csv_path)
     # We sort to be sure that the result will be stable
