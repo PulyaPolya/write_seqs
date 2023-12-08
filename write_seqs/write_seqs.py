@@ -119,13 +119,13 @@ def _get_items_from_corpora(
     _, corpora, _ = next(os.walk(src_data_dir))
     for corpus_name in seq_settings.corpora_to_exclude:
         if corpus_name not in corpora:
-            LOGGER.warn(
+            LOGGER.warning(
                 f"corpus '{corpus_name}' in `corpora_to_exclude` not recognized. "
                 f"Valid corpora include {corpora}"
             )
     for corpus_name in seq_settings.training_only_corpora:
         if corpus_name not in corpora:
-            LOGGER.warn(
+            LOGGER.warning(
                 f"corpus '{corpus_name}' in `training_only_corpora` not recognized. "
                 f"Valid corpora include {corpora}"
             )
@@ -594,15 +594,18 @@ def write_datasets(
     # repr_type: t.Literal["oct", "midilike"],
     repr_settings: Path | str | None,
     # data_settings are required because we need to specify at least the feature
-    data_settings: Path | str,
-    overwrite: bool,
+    data_settings: Path | str | SequenceDataSettings,
+    overwrite: bool = False,
     frac: float = 1.0,
     ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     path_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
 ):
     if path_kwargs is None:
         path_kwargs = {}
-    seq_settings = SequenceDataSettings(**load_config_from_yaml(data_settings))
+    if isinstance(data_settings, SequenceDataSettings):
+        seq_settings = data_settings
+    else:
+        seq_settings = SequenceDataSettings(**load_config_from_yaml(data_settings))
     if seq_settings.repr_type == "oct":
         repr_setting_cls = OctupleEncodingSettings
     elif seq_settings.repr_type == "midilike":
