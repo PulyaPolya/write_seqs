@@ -15,8 +15,8 @@ def aug_within_range(
     n_keys: int,
     hi: int = HI_PITCH,
     low: int = LOW_PITCH,
-    min_trans: int = -12,
-    max_trans: int = 12,
+    min_trans: int = -5,
+    max_trans: int = 6,
 ):
     # if n_keys is None, we transpose to every step within range
     avail_range = hi - low

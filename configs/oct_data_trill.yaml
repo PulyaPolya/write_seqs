@@ -3,6 +3,6 @@ features:
 hop: 250
 window_len: 1000
 repr_type: oct
-aug_by_key: true
-aug_by_key_n_keys: 12
+aug_within_range: true
+aug_within_range_n_keys: 12
 aug_rhythms: true
