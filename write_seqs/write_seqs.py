@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+from reprs import ReprEncodeError
 from reprs.midi_like import MidiLikeSettings
 from reprs.oct import OctupleEncodingSettings
 from reprs.shared import ReprSettingsBase
@@ -117,6 +118,14 @@ def _get_items_from_corpora(
     # `corpora` are names of subfolders within the main data dir, such as `RenDissData`,
     #   `ABCData`, etc.
     _, corpora, _ = next(os.walk(src_data_dir))
+    if not corpora:
+        LOGGER.error(
+            f"Found no corpora; there should be at least one subdirectory of `{src_data_dir}`"
+        )
+        raise ValueError(
+            f"Found no corpora; there should be at least one subdirectory of `{src_data_dir}`"
+        )
+
     for corpus_name in seq_settings.corpora_to_exclude:
         if corpus_name not in corpora:
             LOGGER.warning(
@@ -416,35 +425,42 @@ def write_item(
     #   which is better. For now I'm putting augmentation first because
     #   then if we use a hop size < window_len we only need to augment
     #   each note once, rather than many times.
-    for augmented_df in augment(split, labeled_df, seq_settings, item.synthetic):
-        encoded = repr_settings.encode_f(
-            augmented_df, repr_settings, feature_names=features
-        )
-        # (Malcolm 2023-12-01) We use the int hash to set the start offset in a
-        #   deterministic way. However, it will be the same for every augmentation.
-        #   It would be nice to make a different, but deterministic, hash for
-        #   every augmentation.
-        assert seq_settings.window_len is not None
-        start_i = 0 - item.int_hash % seq_settings.window_len
-
-        transpose, scaled_by = get_df_attrs(augmented_df)
-        for i, segment in enumerate(
-            encoded.segment(seq_settings.window_len, seq_settings.hop, start_i=start_i)
-        ):
-            feature_segments = [" ".join(str(x) for x in segment[f]) for f in features]
-            print("-\\|/"[i % 4], end="\r", flush=True)
-            write_symbols(
-                csv_chunk_writer,
-                item.score_id,
-                item.score_path,
-                item.csv_path,
-                transpose,
-                scaled_by,
-                segment["segment_onset"],  # type:ignore
-                segment["df_indices"],
-                " ".join(segment["input"]),  # type:ignore
-                *feature_segments,
+    try:
+        for augmented_df in augment(split, labeled_df, seq_settings, item.synthetic):
+            encoded = repr_settings.encode_f(
+                augmented_df, repr_settings, feature_names=features
             )
+            # (Malcolm 2023-12-01) We use the int hash to set the start offset in a
+            #   deterministic way. However, it will be the same for every augmentation.
+            #   It would be nice to make a different, but deterministic, hash for
+            #   every augmentation.
+            assert seq_settings.window_len is not None
+            start_i = 0 - item.int_hash % seq_settings.window_len
+
+            transpose, scaled_by = get_df_attrs(augmented_df)
+            for i, segment in enumerate(
+                encoded.segment(
+                    seq_settings.window_len, seq_settings.hop, start_i=start_i
+                )
+            ):
+                feature_segments = [
+                    " ".join(str(x) for x in segment[f]) for f in features
+                ]
+                print("-\\|/"[i % 4], end="\r", flush=True)
+                write_symbols(
+                    csv_chunk_writer,
+                    item.score_id,
+                    item.score_path,
+                    item.csv_path,
+                    transpose,
+                    scaled_by,
+                    segment["segment_onset"],  # type:ignore
+                    segment["df_indices"],
+                    " ".join(segment["input"]),  # type:ignore
+                    *feature_segments,
+                )
+    except ReprEncodeError:
+        LOGGER.warning(f"encoding {item.csv_path} failed, skipping")
 
 
 COLUMNS = [
