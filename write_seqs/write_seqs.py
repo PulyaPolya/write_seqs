@@ -424,7 +424,8 @@ def write_item(
 
     if not seq_settings.use_tempi:
         # Give everything the same tempo to test the effect of not using tempi
-        labeled_df["tempo"] = 120.0
+        tempo_mask = labeled_df.type == "tempo"
+        labeled_df.loc[tempo_mask, "other"] = "{'tempo': 120.0}"
 
     # I could augment before or after segmenting df... not entirely sure
     #   which is better. For now I'm putting augmentation first because
