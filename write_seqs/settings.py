@@ -47,6 +47,7 @@ class SequenceDataSettings:
     split_seed: t.Optional[int] = 42
     split_by_corpora: bool = True
     proportions_exclude_training_only_items: bool = True
+    use_tempi: bool = True
 
     def __post_init__(self):
         if isinstance(self.features, str):
