@@ -13,6 +13,7 @@ from multiprocessing import Manager, Pool, Value
 
 from omegaconf import OmegaConf
 from reprs.oct import OctupleEncodingSettings
+
 from write_seqs.settings import SequenceDataSettings
 from write_seqs.write_seqs import COLUMNS, CorpusItem, CSVChunkWriter, write_item
 
@@ -45,7 +46,7 @@ class Config:
     )
     seq_settings: SequenceDataSettings = field(
         default_factory=lambda: SequenceDataSettings(
-            features=(), repr_type="oct", hop=950, window_len=1000
+            features=(), repr_type="oct", hop=750, window_len=1000
         )
     )
     max_files: int | None = None
