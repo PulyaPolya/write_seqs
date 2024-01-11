@@ -1,0 +1,9 @@
+features:
+  - "pos_token_target"
+  - "dur_token_target"
+  - "bar_delta"
+hop: 500
+window_len: 1000
+repr_type: oct
+aug_within_range: false
+aug_rhythms: false

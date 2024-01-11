@@ -1,0 +1,7 @@
+target_columns:
+  - "onset_target"
+  - "release_target"
+encoded_targets:
+  - "pos_token"
+  - "dur_token"
+  - "bar_number"

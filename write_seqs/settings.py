@@ -17,7 +17,7 @@ class SequenceDataSettings:
     # NB: for MidiLikeEncoding, if "keep_onsets_together", hop is measured in "unique
     #   onsets"; there could be 6 notes sounding at time 1, but hop only considers them
     #   as one onset.
-    features: t.Sequence[str]
+    features: t.Sequence[str] = ()
     hop: int = 8
     window_len: t.Optional[int] = 128
     min_window_len: t.Optional[int] = None
