@@ -87,7 +87,7 @@ def main():
     with open(seq_settings_path) as inf:
         seq_settings = json.load(inf)
 
-    targets = seq_settings["features"]
+    targets = seq_settings["features"] + seq_settings["sequence_level_features"]
 
     if os.path.exists(output_dir):
         raise ValueError(f"{output_dir=} exists")
@@ -116,13 +116,13 @@ def main():
             if len(targets) == 1:
                 with open(output_dir / f"targets_{split}.txt", "a") as appendf:
                     for row in csv_contents[targets[0]]:
-                        appendf.write(row)
+                        appendf.write(str(row))
                         appendf.write("\n")
             else:
                 for i, target in enumerate(targets):
                     with open(output_dir / f"targets_{i}_{split}.txt", "a") as appendf:
                         for row in csv_contents[target]:
-                            appendf.write(row)
+                            appendf.write(str(row))
                             appendf.write("\n")
             metadata_cols = [
                 name
