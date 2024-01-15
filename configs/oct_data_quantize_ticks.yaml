@@ -1,0 +1,8 @@
+features:
+  - "onset_delta_target_ticks"
+  - "release_delta_target_ticks"
+hop: 500
+window_len: 1000
+repr_type: oct
+aug_within_range: false
+aug_rhythms: false
