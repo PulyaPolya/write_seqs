@@ -1,0 +1,6 @@
+sequence_level_features: jitter
+hop: 1000
+window_len: 1000
+repr_type: oct
+aug_within_range: false
+aug_rhythms: false

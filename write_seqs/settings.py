@@ -18,6 +18,9 @@ class SequenceDataSettings:
     #   onsets"; there could be 6 notes sounding at time 1, but hop only considers them
     #   as one onset.
     features: t.Sequence[str] = ()
+
+    # we look for sequence_level_features in the df attrs
+    sequence_level_features: t.Sequence[str] = ()
     hop: int = 8
     window_len: t.Optional[int] = 128
     min_window_len: t.Optional[int] = None
@@ -52,6 +55,8 @@ class SequenceDataSettings:
     def __post_init__(self):
         if isinstance(self.features, str):
             self.features = (self.features,)
+        if isinstance(self.sequence_level_features, str):
+            self.sequence_level_features = (self.sequence_level_features,)
         if isinstance(self.training_only_corpora, str):
             self.training_only_corpora = (self.training_only_corpora,)
 

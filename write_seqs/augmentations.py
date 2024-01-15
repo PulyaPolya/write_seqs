@@ -4,42 +4,41 @@ from itertools import chain
 
 import pandas as pd
 from music_df import chromatic_transpose
-from music_df.augmentations import aug_by_trans, aug_rhythms
+from music_df.augmentations import aug_by_trans, aug_rhythms, aug_within_range
 
 from write_seqs.constants import HI_PITCH, LOW_PITCH
 from write_seqs.settings import SequenceDataSettings
 
-
-def aug_within_range(
-    df_iter: t.Iterable[pd.DataFrame],
-    n_keys: int,
-    hi: int = HI_PITCH,
-    low: int = LOW_PITCH,
-    min_trans: int = -5,
-    max_trans: int = 6,
-):
-    # if n_keys is None, we transpose to every step within range
-    avail_range = hi - low
-    for df in df_iter:
-        if "spelling" in df.columns:
-            raise ValueError("need to use 'tranpose_to_key' with spelled data")
-        actual_max = int(df.pitch.max())
-        actual_min = int(df.pitch.min())
-        actual_range = actual_max - actual_min
-        n_trans = avail_range - actual_range + 1
-        if n_trans <= 0:
-            continue
-        trans = list(
-            range(
-                max(low - actual_min, min_trans),
-                min(max_trans, low - actual_min + n_trans),
-            )
-        )
-        if n_keys < n_trans:
-            random.shuffle(trans)
-            trans = trans[:n_keys]
-        for t in trans:
-            yield chromatic_transpose(df, t, inplace=False, label=True)
+# def aug_within_range(
+#     df_iter: t.Iterable[pd.DataFrame],
+#     n_keys: int,
+#     hi: int = HI_PITCH,
+#     low: int = LOW_PITCH,
+#     min_trans: int = -5,
+#     max_trans: int = 6,
+# ):
+#     # if n_keys is None, we transpose to every step within range
+#     avail_range = hi - low
+#     for df in df_iter:
+#         if "spelling" in df.columns:
+#             raise ValueError("need to use 'tranpose_to_key' with spelled data")
+#         actual_max = int(df.pitch.max())
+#         actual_min = int(df.pitch.min())
+#         actual_range = actual_max - actual_min
+#         n_trans = avail_range - actual_range + 1
+#         if n_trans <= 0:
+#             continue
+#         trans = list(
+#             range(
+#                 max(low - actual_min, min_trans),
+#                 min(max_trans, low - actual_min + n_trans),
+#             )
+#         )
+#         if n_keys < n_trans:
+#             random.shuffle(trans)
+#             trans = trans[:n_keys]
+#         for t in trans:
+#             yield chromatic_transpose(df, t, inplace=False, label=True)
 
 
 # def aug_rhythms(

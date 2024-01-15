@@ -61,6 +61,7 @@ class CorpusItem:
             self.csv_path,
             converters={"onset": fraction_to_float, "release": fraction_to_float},
         )
+        labeled_df.attrs |= self.attrs
         labeled_df.attrs["global_key"] = self.attrs.get("global_key", None)
         labeled_df.attrs["global_key_sig"] = self.attrs.get("global_key_sig", None)
         labeled_df.attrs["pc_columns"] = self.attrs.get("pc_columns", ())
@@ -370,6 +371,18 @@ def get_df_attrs(df):
     return transpose, scaled_by
 
 
+def get_sequence_level_features(
+    df: pd.DataFrame, seq_settings: SequenceDataSettings
+) -> list[str]:
+    out = []
+    for feature in seq_settings.sequence_level_features:
+        val = df.attrs[feature]
+        if isinstance(val, bool):
+            val = int(val)
+        out.append(str(val))
+    return out
+
+
 class CSVChunkWriter:
     """Writes output to CSV file, dividing into chunks of `n_lines_per_chunk`."""
 
@@ -443,6 +456,10 @@ def write_item(
             assert seq_settings.window_len is not None
             start_i = 0 - item.int_hash % seq_settings.window_len
 
+            sequence_level_features = get_sequence_level_features(
+                augmented_df, seq_settings
+            )
+
             transpose, scaled_by = get_df_attrs(augmented_df)
             for i, segment in enumerate(
                 encoded.segment(
@@ -464,6 +481,7 @@ def write_item(
                     segment["df_indices"],
                     " ".join(segment["input"]),  # type:ignore
                     *feature_segments,
+                    *sequence_level_features,
                 )
     except ReprEncodeError:
         LOGGER.warning(f"encoding {item.csv_path} failed, skipping")
@@ -495,7 +513,9 @@ def write_data(
     format_path = os.path.join(data_dir, "{}.csv")
     os.makedirs(os.path.dirname(format_path), exist_ok=True)
     features = list(seq_settings.features)
-    csv_chunk_writer = CSVChunkWriter(format_path, COLUMNS + features)
+    csv_chunk_writer = CSVChunkWriter(
+        format_path, COLUMNS + features + list(seq_settings.sequence_level_features)
+    )
     try:
         init_dirs(output_folder)
         for item in item_iterator(items, verbose):
