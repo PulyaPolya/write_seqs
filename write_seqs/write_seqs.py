@@ -61,6 +61,10 @@ class CorpusItem:
             self.csv_path,
             converters={"onset": fraction_to_float, "release": fraction_to_float},
         )
+        if "Unnamed: 0" in labeled_df.columns:
+            labeled_df = labeled_df.set_index("Unnamed: 0")
+            labeled_df.index.name = None
+
         labeled_df.attrs |= self.attrs
         labeled_df.attrs["global_key"] = self.attrs.get("global_key", None)
         labeled_df.attrs["global_key_sig"] = self.attrs.get("global_key_sig", None)
