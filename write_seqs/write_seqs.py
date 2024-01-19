@@ -38,7 +38,9 @@ def fraction_to_float(x):
 
 
 class CorpusItem:
-    def __init__(self, csv_path: str, corpus_name: str | None = None):
+    def __init__(
+        self, csv_path: str, corpus_name: str | None = None, drop_spelling: bool = False
+    ):
         json_path = csv_path[:-3] + "json"
         try:
             with open(json_path) as inf:
@@ -55,6 +57,7 @@ class CorpusItem:
         self.score_id = attrs.get("score_name", csv_path)
         self.attrs = attrs
         self.corpus_name = corpus_name
+        self._drop_spelling = drop_spelling
 
     def read_df(self):
         labeled_df = pd.read_csv(
@@ -64,6 +67,8 @@ class CorpusItem:
         if "Unnamed: 0" in labeled_df.columns:
             labeled_df = labeled_df.set_index("Unnamed: 0")
             labeled_df.index.name = None
+        if self._drop_spelling and "spelling" in labeled_df.columns:
+            labeled_df = labeled_df.drop("spelling", axis=1)
 
         labeled_df.attrs |= self.attrs
         labeled_df.attrs["global_key"] = self.attrs.get("global_key", None)
@@ -203,7 +208,12 @@ def _get_items_from_corpora(
             is not None
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
-        to_extend.extend([CorpusItem(csv_path, corpus_name) for csv_path in csv_paths])
+        to_extend.extend(
+            [
+                CorpusItem(csv_path, corpus_name, seq_settings.drop_spelling)
+                for csv_path in csv_paths
+            ]
+        )
 
     training_only_items = sorted(training_only_items, key=lambda x: x.csv_path)
     # We sort to be sure that the result will be stable

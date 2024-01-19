@@ -32,6 +32,7 @@ class SequenceDataSettings:
     aug_rhythms: bool = False
     aug_rhythms_n_augs: int = 1
     aug_rhythms_n_possibilities: int = 2
+    drop_spelling: bool = False
 
     repr_type: t.Literal["oct", "midilike"] = "midilike"
 

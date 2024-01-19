@@ -6,3 +6,4 @@ repr_type: oct
 aug_by_key: true
 aug_by_key_n_keys: 12
 aug_rhythms: true
+drop_spelling: true
