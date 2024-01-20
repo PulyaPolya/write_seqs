@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from multiprocessing import Manager, Pool, Value
 
+from dacite import from_dict
 from omegaconf import OmegaConf
 from reprs.oct import OctupleEncodingSettings
 
@@ -26,7 +27,10 @@ def read_config_oc(config_path: str | None, cli_args: list[str] | None, config_c
     if cli_args is not None:
         configs.append(OmegaConf.from_cli(cli_args))
     merged_conf = OmegaConf.merge(*configs)
-    return config_cls(**merged_conf)
+    resolved = OmegaConf.to_container(merged_conf, resolve=True)
+    assert isinstance(resolved, dict)
+    out = from_dict(data_class=config_cls, data=resolved)  # type:ignore
+    return out
 
 
 def get_csv_files(folder_path):
@@ -94,6 +98,7 @@ def chunks(lst, n):
 
 if __name__ == "__main__":
     config = read_config_oc(config_path=None, cli_args=sys.argv[1:], config_cls=Config)
+
     if config.debug:
         pdb_hook()
 
