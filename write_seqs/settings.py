@@ -53,6 +53,8 @@ class SequenceDataSettings:
     proportions_exclude_training_only_items: bool = True
     use_tempi: bool = True
 
+    use_existing_splits: bool = True
+
     def __post_init__(self):
         if isinstance(self.features, str):
             self.features = (self.features,)

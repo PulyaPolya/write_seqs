@@ -99,6 +99,9 @@ class CorpusItem:
         # This allows us to make certain behavior deterministic
         return int(hashlib.md5(self.csv_path.encode()).hexdigest(), 16)
 
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.csv_path})"
+
     # csv_path: str
     # synthetic: bool = False
 
@@ -587,6 +590,27 @@ def write_vocab(
             LOGGER.warning(f"Missing vocab file for {feature_i=}, {feature}")
 
 
+def get_existing_splits_if_possible(src_data_dir: str):
+    out = []
+    for split in ("train", "valid", "test"):
+        split_path = os.path.join(src_data_dir, split)
+        if os.path.exists(split_path):
+            csv_paths = [
+                os.path.join(split_path, p)
+                for p in os.listdir(split_path)
+                if p.endswith(".csv")
+            ]
+            items = [CorpusItem(csv_path) for csv_path in csv_paths]
+            out.append(items)
+        else:
+            out.append([])
+    if not any(out):
+        return None
+    if not all(out):
+        LOGGER.warning(f"At least one split of train/valid/test does not exist")
+    return out
+
+
 def write_datasets_sub(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
@@ -597,13 +621,17 @@ def write_datasets_sub(
     frac: float = 1.0,
     vocab_only: bool = False,
 ):
-    items_tup = get_items(
-        src_data_dir=src_data_dir,
-        seq_settings=seq_settings,
-        repr_settings=repr_settings,
-        proportions=ratios,
-        frac=frac,
-    )
+    items_tup = None
+    if seq_settings.use_existing_splits:
+        items_tup = get_existing_splits_if_possible(src_data_dir)
+    if items_tup is None:
+        items_tup = get_items(
+            src_data_dir=src_data_dir,
+            seq_settings=seq_settings,
+            repr_settings=repr_settings,
+            proportions=ratios,
+            frac=frac,
+        )
     # I was using this to verify that result was the same across runs:
     # for x in items_tup:
     #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
