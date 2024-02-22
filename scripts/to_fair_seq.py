@@ -55,6 +55,7 @@ We also write files `metadata_{split}.csv` containing the
 This can be used to collate the examples with their sources
 
 """
+
 import argparse
 import json
 import os
@@ -107,6 +108,9 @@ def main():
             for f in os.listdir(input_dir / "data" / split)
             if f.endswith(".csv")
         ]
+        if not csv_paths:
+            print(f"Warning: no csv files found in {split}")
+            continue
         for csv_path in csv_paths:
             csv_contents = pd.read_csv(csv_path)
             with open(output_dir / f"midi_{split}.txt", "a") as appendf:

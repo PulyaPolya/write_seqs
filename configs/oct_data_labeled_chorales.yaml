@@ -1,0 +1,11 @@
+features:
+  - label
+hop: 500
+window_len: 1000
+repr_type: oct
+drop_spelling: true
+
+aug_within_range: true
+aug_within_range_n_keys: 12
+
+aug_rhythms: true
