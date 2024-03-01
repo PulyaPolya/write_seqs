@@ -18,6 +18,7 @@ class SequenceDataSettings:
     #   onsets"; there could be 6 notes sounding at time 1, but hop only considers them
     #   as one onset.
     features: t.Sequence[str] = ()
+    concatenated_features: t.Sequence[t.Sequence[str]] = ()
 
     # we look for sequence_level_features in the df attrs
     sequence_level_features: t.Sequence[str] = ()
@@ -62,6 +63,9 @@ class SequenceDataSettings:
             self.sequence_level_features = (self.sequence_level_features,)
         if isinstance(self.training_only_corpora, str):
             self.training_only_corpora = (self.training_only_corpora,)
+
+        for f in self.concatenated_features:
+            assert not isinstance(f, str)
 
 
 def save_dclass(dclass, output_folder):

@@ -383,7 +383,13 @@ def write_symbols(writer, *symbols):
 
 
 def get_df_attrs(df):
-    transpose = df.attrs.get("chromatic_transpose", 0)
+    if "chromatic_tranpose" in df.attrs:
+        transpose = df.attrs["chromatic_transpose"]
+        assert "transposed_by_n_sharps" not in df.attrs
+    elif "transposed_by_n_sharps" in df.attrs:
+        transpose = (df.attrs["transposed_by_n_sharps"] * 7) % 12
+    else:
+        transpose = 0
     scaled_by = df.attrs.get("rhythms_scaled_by", 1.0)
     return transpose, scaled_by
 
@@ -442,15 +448,39 @@ class CSVChunkWriter:
             self._outf.close()
 
 
+def get_concatenated_features(
+    df: pd.DataFrame, seq_settings: SequenceDataSettings, features: list[str]
+):
+    for concat_feature in seq_settings.concatenated_features:
+        concat_feature_name = "_".join(concat_feature)
+        assert concat_feature_name not in df.columns
+        df[concat_feature_name] = df[concat_feature].astype(str).sum(axis=1)
+        df.loc[
+            ((df[concat_feature].isna()) | (df[concat_feature] == "na")).any(axis=1),
+            concat_feature_name,
+        ] = "na"
+    return df
+
+
+173
+
+
 def write_item(
     item: CorpusItem,
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
-    features: t.Sequence[str],
+    features: list[str],
     split: str,
     csv_chunk_writer: CSVChunkWriter,
 ):
     labeled_df = item.read_df()
+
+    concat_feature_names = [
+        "_".join(concat_feature)
+        for concat_feature in seq_settings.concatenated_features
+    ]
+
+    features = features + concat_feature_names
 
     if not seq_settings.use_tempi:
         # Give everything the same tempo to test the effect of not using tempi
@@ -463,6 +493,9 @@ def write_item(
     #   each note once, rather than many times.
     try:
         for augmented_df in augment(split, labeled_df, seq_settings, item.synthetic):
+            augmented_df = get_concatenated_features(
+                augmented_df, seq_settings, features
+            )
             encoded = repr_settings.encode_f(
                 augmented_df, repr_settings, feature_names=features
             )
@@ -478,6 +511,7 @@ def write_item(
             )
 
             transpose, scaled_by = get_df_attrs(augmented_df)
+
             for i, segment in enumerate(
                 encoded.segment(
                     seq_settings.window_len, seq_settings.hop, start_i=start_i
@@ -516,6 +550,13 @@ COLUMNS = [
 ]
 
 
+def get_concatenated_feature_names(seq_settings: SequenceDataSettings):
+    out = []
+    for concat_feature in seq_settings.concatenated_features:
+        out.append("_".join(concat_feature))
+    return out
+
+
 def write_data(
     output_folder: str,
     items: t.List[CorpusItem],
@@ -531,7 +572,11 @@ def write_data(
     os.makedirs(os.path.dirname(format_path), exist_ok=True)
     features = list(seq_settings.features)
     csv_chunk_writer = CSVChunkWriter(
-        format_path, COLUMNS + features + list(seq_settings.sequence_level_features)
+        format_path,
+        COLUMNS
+        + features
+        + get_concatenated_feature_names(seq_settings)
+        + list(seq_settings.sequence_level_features),
     )
     try:
         init_dirs(output_folder)
