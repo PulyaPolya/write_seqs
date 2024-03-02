@@ -88,7 +88,12 @@ def main():
     with open(seq_settings_path) as inf:
         seq_settings = json.load(inf)
 
-    targets = seq_settings["features"] + seq_settings["sequence_level_features"]
+    concat_features = ["_".join(f) for f in seq_settings["concatenated_features"]]
+    targets = (
+        seq_settings["features"]
+        + seq_settings["sequence_level_features"]
+        + concat_features
+    )
 
     if os.path.exists(output_dir):
         raise ValueError(f"{output_dir=} exists")
