@@ -69,6 +69,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--conditioning", default=None, type=str)
     args = parser.parse_args()
     return args
 
@@ -95,6 +96,11 @@ def main():
         + concat_features
     )
 
+    assert isinstance(targets, list)
+
+    if args.conditioning is not None:
+        targets.remove(args.conditioning)
+
     if os.path.exists(output_dir):
         raise ValueError(f"{output_dir=} exists")
     os.makedirs(output_dir)
@@ -104,6 +110,7 @@ def main():
 
     with open(output_dir / "dict.input.txt", "w") as outf:
         outf.write(INPUTS_DICT)
+
     for split in ("train", "test", "valid"):
         if not (input_dir / "data" / split).exists():
             print(f"Warning: {split} directory does not exist")
@@ -133,6 +140,12 @@ def main():
                         for row in csv_contents[target]:
                             appendf.write(str(row))
                             appendf.write("\n")
+            if args.conditioning:
+                with open(output_dir / f"conditioning_{split}.txt", "a") as appendf:
+                    for row in csv_contents[args.conditioning]:
+                        appendf.write(str(row))
+                        appendf.write("\n")
+
             metadata_cols = [
                 name
                 for name in [
