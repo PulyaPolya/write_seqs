@@ -36,9 +36,10 @@ if __name__ == "__main__":
         default=SRC_DATA_DIR,
         help="taken from 'SRC_DATA_DIR' environment variable if not passed",
     )
+    parser.add_argument("--input-paths-dir", type=str, default=None)
     parser.add_argument("--msdebug", action="store_true")
 
-    args = parser.parse_args()
+    args, remaining = parser.parse_known_args()
     if args.msdebug:
         import pdb
         import traceback
@@ -52,12 +53,13 @@ if __name__ == "__main__":
         sys.excepthook = custom_excepthook
     random.seed(args.seed)
     output_folder = write_datasets(
-        args.src_data_dir,
-        args.output_dir,
-        # args.repr_type,
-        args.repr_settings,
-        args.data_settings,
-        args.overwrite,
-        args.frac,
+        src_data_dir=args.src_data_dir,
+        output_dir=args.output_dir,
+        input_paths_folder=args.input_paths_dir,
+        cli_args=remaining,
+        repr_settings_path=args.repr_settings,
+        data_settings_path=args.data_settings,
+        overwrite=args.overwrite,
+        frac=args.frac,
         path_kwargs={"seed": args.seed},
     )

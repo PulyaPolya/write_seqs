@@ -14,14 +14,17 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+from music_df.add_feature import concatenate_features
 from reprs import ReprEncodeError
 from reprs.midi_like import MidiLikeSettings
 from reprs.oct import OctupleEncodingSettings
 from reprs.shared import ReprSettingsBase
 
+from write_seqs.utils.read_config import read_config_oc
 from write_seqs.augmentations import augment
 from write_seqs.settings import SequenceDataSettings, get_dataset_base_dir, save_dclass
 from write_seqs.utils.partition import partition
+from write_seqs.splits_utils import get_paths
 
 LOGGER = logging.getLogger(__name__)
 
@@ -41,6 +44,8 @@ class CorpusItem:
     def __init__(
         self, csv_path: str, corpus_name: str | None = None, drop_spelling: bool = False
     ):
+        if corpus_name is None:
+            corpus_name = os.path.basename(os.path.dirname(csv_path))
         json_path = csv_path[:-3] + "json"
         try:
             with open(json_path) as inf:
@@ -115,253 +120,24 @@ def get_split_dir(output_folder: str, split: str) -> str:
     return input_path
 
 
-def _get_items_from_corpora(
-    src_data_dir: str,
-    seq_settings: SequenceDataSettings,
-    repr_settings: ReprSettingsBase | None,
-    output_format: t.Literal["flat_list", "dict_by_corpus"] = "flat_list",
-) -> (
-    tuple[list[CorpusItem], list[CorpusItem]]
-    | tuple[dict[str, list[CorpusItem]], list[CorpusItem]]
-):
-    """Returns a pair of lists to paths, `items` and `training_only_items`.
-
-    Called by `get_items()` below which returns train/valid/test splits.
-    """
-    # `corpora` are names of subfolders within the main data dir, such as `RenDissData`,
-    #   `ABCData`, etc.
-    _, corpora, _ = next(os.walk(src_data_dir))
-    if not corpora:
-        LOGGER.error(
-            f"Found no corpora; there should be at least one subdirectory of `{src_data_dir}`"
-        )
-        raise ValueError(
-            f"Found no corpora; there should be at least one subdirectory of `{src_data_dir}`"
-        )
-
-    for corpus_name in seq_settings.corpora_to_exclude:
-        if corpus_name not in corpora:
-            LOGGER.warning(
-                f"corpus '{corpus_name}' in `corpora_to_exclude` not recognized. "
-                f"Valid corpora include {corpora}"
-            )
-    for corpus_name in seq_settings.training_only_corpora:
-        if corpus_name not in corpora:
-            LOGGER.warning(
-                f"corpus '{corpus_name}' in `training_only_corpora` not recognized. "
-                f"Valid corpora include {corpora}"
-            )
-    training_only_items = []
-
-    if output_format == "flat_list":
-        items = []
-    else:
-        items = defaultdict(list)
-
-    # We sort corpora to make output stable
-    for corpus_name in sorted(corpora):
-        if (
-            seq_settings.corpora_to_include
-            and corpus_name not in seq_settings.corpora_to_include
-            and corpus_name not in seq_settings.synthetic_corpora_to_include
-        ):
-            continue
-        if corpus_name in seq_settings.corpora_to_exclude:
-            continue
-        corpus_dir = os.path.join(src_data_dir, corpus_name)
-        try:
-            with open(os.path.join(corpus_dir, "attrs.json")) as inf:
-                corpus_attrs = json.load(inf)
-        except FileNotFoundError:
-            corpus_attrs = {}
-
-        if (
-            corpus_attrs.get("synthetic")
-            and corpus_name not in seq_settings.synthetic_corpora_to_include
-        ):
-            continue
-
-        if (
-            corpus_name in seq_settings.training_only_corpora
-            and corpus_name not in seq_settings.corpora_to_include
-        ) or corpus_attrs.get("synthetic", False):
-            to_extend = training_only_items
-        else:
-            if output_format == "flat_list":
-                assert isinstance(items, list)
-                to_extend = items
-            else:
-                assert isinstance(items, dict)
-                to_extend = items[corpus_name]
-
-        if repr_settings is not None and not repr_settings.validate_corpus(
-            corpus_attrs, corpus_name
-        ):
-            LOGGER.warning(
-                f"Corpus {corpus_name} was not validated by {repr_settings.__class__.__name__}, skipping it"
-            )
-            continue
-        csv_paths = [
-            os.path.join(corpus_dir, p)
-            for p in os.listdir(corpus_dir)
-            if p.endswith(".csv")
-        ]
-        if (
-            prop := seq_settings.corpora_sample_proportions.get(corpus_name, None)
-            is not None
-        ):
-            csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
-        to_extend.extend(
-            [
-                CorpusItem(csv_path, corpus_name, seq_settings.drop_spelling)
-                for csv_path in csv_paths
-            ]
-        )
-
-    training_only_items = sorted(training_only_items, key=lambda x: x.csv_path)
-    # We sort to be sure that the result will be stable
-    if output_format == "flat_list":
-        assert isinstance(items, list)
-        items = sorted(items, key=lambda x: x.csv_path)
-        return items, training_only_items
-
-    else:
-        assert isinstance(items, dict)
-        for corpus_name in corpora:
-            items[corpus_name] = sorted(items[corpus_name], key=lambda x: x.csv_path)
-        return items, training_only_items
-
-
-def get_items_within_corpora(
-    src_data_dir: str,
-    seq_settings: SequenceDataSettings,
-    repr_settings: ReprSettingsBase | None,
-) -> tuple[dict[str, list[CorpusItem]], list[CorpusItem]]:
-    out = _get_items_from_corpora(
-        src_data_dir, seq_settings, repr_settings, output_format="dict_by_corpus"
-    )
-    assert isinstance(out[0], dict) and isinstance(out[1], list)
-    return out  # type:ignore
-
-
-def get_items_across_corpora(
-    src_data_dir: str,
-    seq_settings: SequenceDataSettings,
-    repr_settings: ReprSettingsBase | None,
-) -> tuple[list[CorpusItem], list[CorpusItem]]:
-    out = _get_items_from_corpora(
-        src_data_dir, seq_settings, repr_settings, output_format="flat_list"
-    )
-    assert isinstance(out[0], list) and isinstance(out[1], list)
-    return out  # type:ignore
-
-
-def handle_partition(
-    items: list[CorpusItem],
-    training_only_items: list[CorpusItem] | None = None,
-    proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
-    frac: float = 1.0,
-    proportions_exclude_training_only_items: bool = True,
-) -> tuple[
-    list[CorpusItem], list[CorpusItem], list[CorpusItem], list[CorpusItem] | None
-]:
-    if frac < 1.0:
-        # Get a random subset of all items
-        items, _ = partition(
-            (frac, 1.0 - frac), items, [item.file_size for item in items]
-        )
-        if training_only_items is not None:
-            training_only_items, _ = partition(
-                (frac, 1.0 - frac),
-                training_only_items,
-                [item.file_size for item in training_only_items],
-            )
-
-    if proportions_exclude_training_only_items:
-        train_items, valid_items, test_items = partition(
-            proportions, items, [item.file_size for item in items]
-        )
-    else:
-        assert training_only_items is not None
-        training_only_size = sum(item.file_size for item in training_only_items)
-        total_size = sum(item.file_size for item in items) + training_only_size
-        training_only_prop = training_only_size / total_size
-        if training_only_prop >= proportions[0]:
-            LOGGER.warning(f"training set will contain *only* training_only_corpora")
-        adjusted_proportions = (
-            max(proportions[0] - training_only_prop, 0),
-        ) + proportions[1:]
-        adjusted_proportions = tuple(
-            prop / sum(adjusted_proportions) for prop in adjusted_proportions
-        )
-        train_items, valid_items, test_items = partition(
-            adjusted_proportions, items, [item.file_size for item in items]
-        )
-    return train_items, valid_items, test_items, training_only_items
-
-
 def get_items(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
-    repr_settings: ReprSettingsBase | None,
-    proportions: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
+    proportions: tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
-) -> t.Tuple[t.List[CorpusItem], t.List[CorpusItem], t.List[CorpusItem]]:
-    """Returns lists of paths for files in train, valid, and test splits, respectively."""
-    if seq_settings.split_seed is not None:
-        random.seed(seq_settings.split_seed)
-    if seq_settings.split_by_corpora:
-        if not seq_settings.proportions_exclude_training_only_items:
-            raise NotImplementedError
-        items, training_only_items = get_items_within_corpora(
-            src_data_dir, seq_settings, repr_settings
+) -> tuple[list[CorpusItem], list[CorpusItem], list[CorpusItem]]:
+    paths = get_paths(
+        src_data_dir=src_data_dir,
+        seq_settings=seq_settings,
+        proportions=proportions,
+        frac=frac,
+    )
+    items = []
+    for split in paths:
+        items.append(
+            [CorpusItem(p, drop_spelling=seq_settings.drop_spelling) for p in split]
         )
-        training_only_items, _ = partition(
-            (frac, 1.0 - frac),
-            training_only_items,
-            [item.file_size for item in training_only_items],
-        )
-
-        len_items = sum(len(sub_items) for sub_items in items.values())
-        if len_items * frac < 1:
-            raise ValueError(f"{src_data_dir=} {len_items=} * {frac=} < 1")
-        train_items = []
-        valid_items = []
-        test_items = []
-
-        for corpus_name in items:
-            c_train_items, c_valid_items, c_test_items, _ = handle_partition(
-                items[corpus_name],
-                proportions=proportions,
-                frac=frac,
-                proportions_exclude_training_only_items=True,
-            )
-            train_items.extend(c_train_items)
-            valid_items.extend(c_valid_items)
-            test_items.extend(c_test_items)
-
-    else:
-        items, training_only_items = get_items_across_corpora(
-            src_data_dir, seq_settings, repr_settings
-        )
-
-        # I was using this to verify that result was the same across runs:
-        # for x in (items, training_only_items):
-        #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
-
-        if len(items) * frac < 1:
-            raise ValueError(f"{src_data_dir=} {len(items)=} * {frac=} < 1")
-        train_items, valid_items, test_items, training_only_items = handle_partition(
-            items,
-            training_only_items=training_only_items,
-            proportions=proportions,
-            frac=frac,
-            proportions_exclude_training_only_items=seq_settings.proportions_exclude_training_only_items,
-        )
-        assert training_only_items is not None
-
-    train_items.extend(training_only_items)
-    return train_items, valid_items, test_items
+    return tuple(items)
 
 
 def init_dirs(output_folder):
@@ -452,17 +228,16 @@ def get_concatenated_features(
     df: pd.DataFrame, seq_settings: SequenceDataSettings, features: list[str]
 ):
     for concat_feature in seq_settings.concatenated_features:
-        concat_feature_name = "_".join(concat_feature)
-        assert concat_feature_name not in df.columns
-        df[concat_feature_name] = df[concat_feature].astype(str).sum(axis=1)
-        df.loc[
-            ((df[concat_feature].isna()) | (df[concat_feature] == "na")).any(axis=1),
-            concat_feature_name,
-        ] = "na"
+        df = concatenate_features(df, concat_feature)
     return df
-
-
-173
+    #     concat_feature_name = "_".join(concat_feature)
+    #     assert concat_feature_name not in df.columns
+    #     df[concat_feature_name] = df[concat_feature].astype(str).sum(axis=1)
+    #     df.loc[
+    #         ((df[concat_feature].isna()) | (df[concat_feature] == "na")).any(axis=1),
+    #         concat_feature_name,
+    #     ] = "na"
+    # return df
 
 
 def write_item(
@@ -656,27 +431,51 @@ def get_existing_splits_if_possible(src_data_dir: str):
     return out
 
 
+def get_items_from_input_paths(
+    src_data_dir: str, seq_settings: SequenceDataSettings, input_paths_folder: str
+) -> tuple[list[CorpusItem], list[CorpusItem], list[CorpusItem]]:
+    items = []
+    for kind in ("train", "valid", "test"):
+        file_path = os.path.join(input_paths_folder, f"{kind}_paths.txt")
+        if not os.path.exists(file_path):
+            LOGGER.warning(f"Can't find {file_path}, skipping {kind} split")
+            items.append([])
+            continue
+        with open(file_path) as inf:
+            split = [os.path.join(src_data_dir, p.strip()) for p in inf.readlines()]
+        for p in split:
+            assert os.path.exists(p)
+        items.append(
+            [CorpusItem(p, drop_spelling=seq_settings.drop_spelling) for p in split]
+        )
+    return tuple(items)
+
+
 def write_datasets_sub(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
-    repr_settings: ReprSettingsBase,
     splits_todo: t.Dict[str, bool],
     output_folder: str,
+    input_paths_folder: str | None = None,
     ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
     vocab_only: bool = False,
 ):
     items_tup = None
-    if seq_settings.use_existing_splits:
-        items_tup = get_existing_splits_if_possible(src_data_dir)
-    if items_tup is None:
-        items_tup = get_items(
-            src_data_dir=src_data_dir,
-            seq_settings=seq_settings,
-            repr_settings=repr_settings,
-            proportions=ratios,
-            frac=frac,
+    if input_paths_folder:
+        items_tup = get_items_from_input_paths(
+            src_data_dir, seq_settings, input_paths_folder
         )
+    else:
+        if seq_settings.use_existing_splits:
+            items_tup = get_existing_splits_if_possible(src_data_dir)
+        if items_tup is None:
+            items_tup = get_items(
+                src_data_dir=src_data_dir,
+                seq_settings=seq_settings,
+                proportions=ratios,
+                frac=frac,
+            )
     # I was using this to verify that result was the same across runs:
     # for x in items_tup:
     #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
@@ -687,7 +486,7 @@ def write_datasets_sub(
             if not wrote_vocab:
                 write_vocab(
                     src_data_dir,
-                    repr_settings,
+                    seq_settings.repr_settings,
                     output_folder,
                     seq_settings.features,
                 )
@@ -698,7 +497,7 @@ def write_datasets_sub(
                     items,
                     split,
                     seq_settings,
-                    repr_settings,
+                    seq_settings.repr_settings,
                 )
 
 
@@ -718,12 +517,15 @@ def load_config_from_yaml(yaml_path: Path | str | None) -> dict:
 
 
 def write_datasets(
+    *,
     src_data_dir: str,
     output_dir: str,
-    # repr_type: t.Literal["oct", "midilike"],
-    repr_settings: Path | str | None,
+    cli_args: list[t.Any] | None = None,
+    input_paths_folder: str | None = None,
+    repr_settings_path: Path | str | None = None,
     # data_settings are required because we need to specify at least the feature
-    data_settings: Path | str | SequenceDataSettings,
+    data_settings: SequenceDataSettings | None = None,
+    data_settings_path: Path | str | None = None,
     overwrite: bool = False,
     frac: float = 1.0,
     ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
@@ -731,31 +533,44 @@ def write_datasets(
 ):
     if path_kwargs is None:
         path_kwargs = {}
-    if isinstance(data_settings, SequenceDataSettings):
+    if data_settings is not None:
         seq_settings = data_settings
+        assert data_settings_path is None and not cli_args
     else:
-        seq_settings = SequenceDataSettings(**load_config_from_yaml(data_settings))
-    if seq_settings.repr_type == "oct":
-        repr_setting_cls = OctupleEncodingSettings
-    elif seq_settings.repr_type == "midilike":
-        repr_setting_cls = MidiLikeSettings
-    else:
-        raise NotImplementedError()
-    repr_settings_inst = repr_setting_cls(**load_config_from_yaml(repr_settings))
+        seq_settings = read_config_oc(
+            config_cls=SequenceDataSettings,
+            config_path=str(data_settings_path),
+            cli_args=cli_args if cli_args else [],
+        )
+        # seq_settings = SequenceDataSettings(**load_config_from_yaml(data_settings))
+    if repr_settings_path is not None:
+        # TODO: (Malcolm 2024-03-13) eventually merge repr settings rather
+        #   than overwriting them
+        LOGGER.warning(
+            f"{repr_settings_path=}, ignoring any repr settings provided by cli or data_settings"
+        )
+        if seq_settings.repr_type == "oct":
+            repr_setting_cls = OctupleEncodingSettings
+        elif seq_settings.repr_type == "midilike":
+            repr_setting_cls = MidiLikeSettings
+        else:
+            raise NotImplementedError()
+        repr_settings = repr_setting_cls(**load_config_from_yaml(repr_settings_path))
+        seq_settings.repr_settings = repr_settings
     output_folder = os.path.join(get_dataset_base_dir(), output_dir)
 
     print("Chord tones data folder: ", output_folder)
     save_dclass(seq_settings, output_folder)
-    save_dclass(repr_settings_inst, output_folder)
+    save_dclass(seq_settings.repr_settings, output_folder)
 
     splits_todo = check_if_splits_exist(output_folder, overwrite)
     if any(splits_todo.values()):
         write_datasets_sub(
             src_data_dir=src_data_dir,
             seq_settings=seq_settings,
-            repr_settings=repr_settings_inst,
             splits_todo=splits_todo,
             output_folder=output_folder,
+            input_paths_folder=input_paths_folder,
             ratios=ratios,
             frac=frac,
         )

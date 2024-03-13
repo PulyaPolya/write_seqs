@@ -1,2 +1,3 @@
-features: "chord_tone"
+features:
+  - "chord_tone"
 repr_type: oct

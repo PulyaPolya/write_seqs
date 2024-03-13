@@ -140,6 +140,7 @@ def main():
                         for row in csv_contents[target]:
                             appendf.write(str(row))
                             appendf.write("\n")
+
             if args.conditioning:
                 with open(output_dir / f"conditioning_{split}.txt", "a") as appendf:
                     for row in csv_contents[args.conditioning]:

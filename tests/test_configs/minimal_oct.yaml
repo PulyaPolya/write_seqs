@@ -1,2 +1,3 @@
-features: dummy_feature
+features:
+  - dummy_feature
 repr_type: oct

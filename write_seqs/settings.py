@@ -5,6 +5,10 @@ from dataclasses import asdict, dataclass, field
 
 from write_seqs.utils.get_hash import get_hash
 
+from reprs.midi_like import MidiLikeSettings
+from reprs.oct import OctupleEncodingSettings
+from reprs.shared import ReprSettingsBase
+
 
 def get_dataset_base_dir():
     # I encapsulate this in a function so we can change the environment variable
@@ -17,11 +21,11 @@ class SequenceDataSettings:
     # NB: for MidiLikeEncoding, if "keep_onsets_together", hop is measured in "unique
     #   onsets"; there could be 6 notes sounding at time 1, but hop only considers them
     #   as one onset.
-    features: t.Sequence[str] = ()
-    concatenated_features: t.Sequence[t.Sequence[str]] = ()
+    features: t.List[str] = field(default_factory=list)
+    concatenated_features: t.List[t.Sequence[str]] = field(default_factory=list)
 
     # we look for sequence_level_features in the df attrs
-    sequence_level_features: t.Sequence[str] = ()
+    sequence_level_features: t.List[str] = field(default_factory=list)
     hop: int = 8
     window_len: t.Optional[int] = 128
     min_window_len: t.Optional[int] = None
@@ -39,13 +43,13 @@ class SequenceDataSettings:
 
     dataset_name: t.Optional[str] = None
 
-    corpora_to_exclude: t.Sequence[str] = ()
+    corpora_to_exclude: t.List[str] = field(default_factory=list)
     # corpora_to_include is ignored if it is empty, otherwise it takes
     #   precedence over corpora_to_sclude
-    corpora_to_include: t.Sequence[str] = ()
+    corpora_to_include: t.List[str] = field(default_factory=list)
     # synthetic corpora must be explicitly included, otherwise they are excluded
-    synthetic_corpora_to_include: t.Sequence[str] = ()
-    training_only_corpora: t.Union[str, t.Sequence[str]] = ()
+    synthetic_corpora_to_include: t.List[str] = field(default_factory=list)
+    training_only_corpora: t.List[str] = field(default_factory=list)
     corpora_sample_proportions: t.Dict[str, float] = field(
         default_factory=lambda: {"RenDissData": 0.1}
     )
@@ -56,16 +60,41 @@ class SequenceDataSettings:
 
     use_existing_splits: bool = True
 
+    repr_settings_oct: OctupleEncodingSettings = field(
+        default_factory=OctupleEncodingSettings
+    )
+    repr_settings_midilike: MidiLikeSettings = field(default_factory=MidiLikeSettings)
+
     def __post_init__(self):
         if isinstance(self.features, str):
-            self.features = (self.features,)
+            self.features = [self.features]
         if isinstance(self.sequence_level_features, str):
-            self.sequence_level_features = (self.sequence_level_features,)
+            self.sequence_level_features = [self.sequence_level_features]
         if isinstance(self.training_only_corpora, str):
-            self.training_only_corpora = (self.training_only_corpora,)
+            self.training_only_corpora = [self.training_only_corpora]
 
         for f in self.concatenated_features:
             assert not isinstance(f, str)
+
+    @property
+    def repr_settings(self) -> ReprSettingsBase:
+        if self.repr_type == "oct":
+            return self.repr_settings_oct
+        elif self.repr_type == "midilike":
+            return self.repr_settings_midilike
+        else:
+            raise ValueError
+
+    @repr_settings.setter
+    def repr_settings(self, value):
+        if self.repr_type == "oct":
+            assert isinstance(value, OctupleEncodingSettings)
+            self.repr_settings_oct = value
+        elif self.repr_type == "midilike":
+            assert isinstance(value, MidiLikeSettings)
+            self.repr_settings_midilike = value
+        else:
+            raise ValueError
 
 
 def save_dclass(dclass, output_folder):

@@ -21,10 +21,9 @@ def test_write_datasets_minimal(repr_type):
 
     seq_settings_path = CONFIG_DIR / f"minimal_{repr_type}.yaml"
     write_datasets(
-        str(DUMMY_DATA_DIR),
-        f"minimal_{repr_type}",
-        None,
-        seq_settings_path,
+        src_data_dir=str(DUMMY_DATA_DIR),
+        output_dir=f"minimal_{repr_type}",
+        data_settings_path=seq_settings_path,
         overwrite=True,
     )
 
@@ -43,5 +42,9 @@ def test_write_datasets(settings_yaml):
     random.seed(42)
     seq_settings_path = CONFIG_DIR / settings_yaml
     write_datasets(
-        SRC_DATA_DIR, "scratch", None, seq_settings_path, overwrite=True, frac=0.005
+        src_data_dir=SRC_DATA_DIR,
+        output_dir="scratch",
+        data_settings_path=seq_settings_path,
+        overwrite=True,
+        frac=0.005,
     )

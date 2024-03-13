@@ -8,3 +8,4 @@ mido
 pandas
 pyyaml
 omegaconf
+dacite
