@@ -1,3 +1,4 @@
+from itertools import chain
 import json
 import logging
 import os
@@ -100,7 +101,7 @@ def _get_paths_from_corpora(
             )
             continue
         csv_paths = [
-            os.path.join(corpus_dir, p)
+            os.path.abspath(os.path.join(corpus_dir, p))
             for p in os.listdir(corpus_dir)
             if p.endswith(".csv")
         ]
@@ -192,6 +193,18 @@ def handle_partition(
     return train_paths, valid_paths, test_paths, training_only_paths
 
 
+def _init_paths(seq_settings, split, src_data_dir):
+    paths_to_include_file = getattr(seq_settings, f"{split}_paths_to_include", None)
+    if not paths_to_include_file:
+        return []
+    with open(paths_to_include_file, "r") as inf:
+
+        return [
+            os.path.abspath(os.path.join(src_data_dir, l.strip()))
+            for l in inf.readlines()
+        ]
+
+
 def get_paths(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
@@ -201,6 +214,15 @@ def get_paths(
     """Returns lists of paths for files in train, valid, and test splits, respectively."""
     if seq_settings.split_seed is not None:
         random.seed(seq_settings.split_seed)
+
+    train_paths = _init_paths(seq_settings, "train", src_data_dir)
+    valid_paths = _init_paths(seq_settings, "valid", src_data_dir)
+    test_paths = _init_paths(seq_settings, "test", src_data_dir)
+
+    existing_training_paths = set(train_paths)
+    existing_test_and_validation_paths = set(chain(valid_paths, test_paths))
+    all_existing_paths = existing_training_paths | existing_test_and_validation_paths
+
     if seq_settings.split_by_corpora:
         if not seq_settings.proportions_exclude_training_only_items:
             raise NotImplementedError
@@ -213,19 +235,27 @@ def get_paths(
             synthetic_corpora_to_include=seq_settings.synthetic_corpora_to_include,
             corpora_sample_proportions=seq_settings.corpora_sample_proportions,
         )
+
+        len_paths = sum(len(sub_paths) for sub_paths in paths.values())
+        if len_paths * frac < 1:
+            raise ValueError(f"{src_data_dir=} {len_paths=} * {frac=} < 1")
+
+        for split in paths:
+            paths[split] = [p for p in paths[split] if p not in all_existing_paths]
+
+        training_only_paths = [
+            p for p in training_only_paths if p not in existing_training_paths
+        ]
+        assert not any(
+            p in existing_test_and_validation_paths for p in training_only_paths
+        )
+
         training_only_file_sizes = [os.path.getsize(p) for p in training_only_paths]
         training_only_paths, _ = partition(
             (frac, 1.0 - frac),
             training_only_paths,
             training_only_file_sizes,  # type:ignore
         )
-
-        len_paths = sum(len(sub_paths) for sub_paths in paths.values())
-        if len_paths * frac < 1:
-            raise ValueError(f"{src_data_dir=} {len_paths=} * {frac=} < 1")
-        train_paths = []
-        valid_paths = []
-        test_paths = []
 
         for corpus_name in paths:
             c_train_paths, c_valid_paths, c_test_paths, _ = handle_partition(
@@ -249,19 +279,32 @@ def get_paths(
             corpora_sample_proportions=seq_settings.corpora_sample_proportions,
         )
 
+        paths = [p for p in paths if p not in all_existing_paths]
+
+        training_only_paths = [
+            p for p in training_only_paths if p not in existing_training_paths
+        ]
+        assert not any(
+            p in existing_test_and_validation_paths for p in training_only_paths
+        )
         # I was using this to verify that result was the same across runs:
         # for x in (items, training_only_items):
         #     print(hashlib.md5(" ".join(xx.csv_path for xx in x).encode()).hexdigest())
 
         if len(paths) * frac < 1:
             raise ValueError(f"{src_data_dir=} {len(paths)=} * {frac=} < 1")
-        train_paths, valid_paths, test_paths, training_only_paths = handle_partition(
-            paths,
-            training_only_paths=training_only_paths,
-            proportions=proportions,
-            frac=frac,
-            proportions_exclude_training_only_paths=seq_settings.proportions_exclude_training_only_items,
+        more_train_paths, more_valid_paths, more_test_paths, training_only_paths = (
+            handle_partition(
+                paths,
+                training_only_paths=training_only_paths,
+                proportions=proportions,
+                frac=frac,
+                proportions_exclude_training_only_paths=seq_settings.proportions_exclude_training_only_items,
+            )
         )
+        train_paths.extend(more_train_paths)
+        valid_paths.extend(more_valid_paths)
+        test_paths.extend(more_test_paths)
         assert training_only_paths is not None
 
     train_paths.extend(training_only_paths)

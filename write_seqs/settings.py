@@ -57,6 +57,9 @@ class SequenceDataSettings:
     split_by_corpora: bool = True
     proportions_exclude_training_only_items: bool = True
     use_tempi: bool = True
+    train_paths_to_include: t.Optional[str] = None
+    valid_paths_to_include: t.Optional[str] = None
+    test_paths_to_include: t.Optional[str] = None
 
     use_existing_splits: bool = True
 
