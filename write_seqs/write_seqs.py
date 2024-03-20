@@ -81,6 +81,12 @@ class CorpusItem:
         labeled_df.attrs["pc_columns"] = self.attrs.get("pc_columns", ())
         labeled_df.attrs["pitch_columns"] = self.attrs.get("pitch_columns", ("pitch",))
         labeled_df.attrs["spelled_columns"] = self.attrs.get("spelled_columns", ())
+        for col in labeled_df.attrs["spelled_columns"]:
+            # We want to make sure that we're using the "b" for flat spelling
+            #   style rather than "-" (so that transposition works correctly.)
+            assert (
+                (labeled_df[col].str.find("-") == -1) | (labeled_df[col].isna())
+            ).all()
         return labeled_df
 
     @cached_property

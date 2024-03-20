@@ -85,6 +85,7 @@ def augment(
     if not apply_augment:
         yield labeled_df
         return
+
     df_iter = iter([labeled_df])
     if settings.aug_by_key:
         assert not settings.aug_within_range
