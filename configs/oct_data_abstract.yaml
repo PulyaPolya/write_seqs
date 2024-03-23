@@ -21,6 +21,7 @@ features:
   - scale_degree_alteration
   - key_signature
   - granular_key_signature
+  - tonicization
 concatenated_features:
   - [key_pc, mode]
   - [key_signature, mode]
