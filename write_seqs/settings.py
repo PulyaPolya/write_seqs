@@ -3,8 +3,6 @@ import os
 import typing as t
 from dataclasses import asdict, dataclass, field
 
-from write_seqs.utils.get_hash import get_hash
-
 from reprs.midi_like import MidiLikeSettings
 from reprs.oct import OctupleEncodingSettings
 from reprs.shared import ReprSettingsBase
@@ -105,27 +103,3 @@ def save_dclass(dclass, output_folder):
     outpath = os.path.join(output_folder, f"{dclass.__class__.__name__}_settings.json")
     with open(outpath, "w") as outf:
         json.dump(asdict(dclass), outf, indent=4)
-
-
-# def path_from_dataclass(dclass, base_dir=None, **kwargs):
-#     if "test" in kwargs and not kwargs["test"]:
-#         del kwargs["test"]
-#     null_args = []
-#     for kwarg, val in kwargs.items():
-#         if isinstance(val, bool):
-#             kwargs[kwarg] = int(val)
-#         elif isinstance(val, (list, tuple)):
-#             kwargs[kwarg] = "+".join(str(item) for item in val)
-#         elif isinstance(val, type(None)):
-#             null_args.append(kwarg)
-#     for kwarg in null_args:
-#         del kwargs[kwarg]
-#     kwarg_str = "_".join(f'{k.replace("_", "-")}={v}' for k, v in kwargs.items())
-#     if base_dir is None:
-#         path_components = [get_dataset_dir(), __package__]
-#     else:
-#         path_components = [base_dir]
-#     if hasattr(dclass, "dataset_name") and dclass.dataset_name:
-#         path_components.append(dclass.dataset_name)
-#     path_components.extend([str(get_hash(dclass)), kwarg_str])
-#     return os.path.join(*path_components)

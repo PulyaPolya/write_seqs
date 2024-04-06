@@ -4,12 +4,9 @@ import json
 import logging
 import os
 import pickle
-import random
 import typing as t
-from collections import defaultdict
 from fractions import Fraction
 from functools import cached_property
-from multiprocessing import Lock, Value
 from pathlib import Path
 
 import pandas as pd
@@ -23,7 +20,6 @@ from reprs.shared import ReprSettingsBase
 from write_seqs.utils.read_config import read_config_oc
 from write_seqs.augmentations import augment
 from write_seqs.settings import SequenceDataSettings, get_dataset_base_dir, save_dclass
-from write_seqs.utils.partition import partition
 from write_seqs.splits_utils import get_paths
 
 LOGGER = logging.getLogger(__name__)
@@ -112,9 +108,6 @@ class CorpusItem:
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.csv_path})"
-
-    # csv_path: str
-    # synthetic: bool = False
 
 
 def get_data_dir(output_folder: str):
@@ -236,14 +229,6 @@ def get_concatenated_features(
     for concat_feature in seq_settings.concatenated_features:
         df = concatenate_features(df, concat_feature)
     return df
-    #     concat_feature_name = "_".join(concat_feature)
-    #     assert concat_feature_name not in df.columns
-    #     df[concat_feature_name] = df[concat_feature].astype(str).sum(axis=1)
-    #     df.loc[
-    #         ((df[concat_feature].isna()) | (df[concat_feature] == "na")).any(axis=1),
-    #         concat_feature_name,
-    #     ] = "na"
-    # return df
 
 
 def write_item(
@@ -548,7 +533,6 @@ def write_datasets(
             config_path=str(data_settings_path),
             cli_args=cli_args if cli_args else [],
         )
-        # seq_settings = SequenceDataSettings(**load_config_from_yaml(data_settings))
     if repr_settings_path is not None:
         # TODO: (Malcolm 2024-03-13) eventually merge repr settings rather
         #   than overwriting them

@@ -68,7 +68,7 @@ def process_csv(csv_path, config, csv_chunk_writer):
         item,
         config.seq_settings,
         config.repr_settings,
-        features=(),
+        features=[],
         # setting split="test" will disable any augmentation
         split="test",
         csv_chunk_writer=csv_chunk_writer,

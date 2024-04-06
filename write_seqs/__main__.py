@@ -19,7 +19,7 @@ if __name__ == "__main__":
         "ignore", message=r"Release of note at .* < onset of note at .*"
     )
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--repr-type", choices=["midilike", "oct"], required=True)
+
     parser.add_argument("--repr-settings", type=str, help="Path to YAML file")
     parser.add_argument("--data-settings", type=str, help="Path to YAML file")
     parser.add_argument("--overwrite", action="store_true")

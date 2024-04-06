@@ -9,6 +9,7 @@ the hash changing. Empty means one of: None, '', (), [], or {}.
 The dataclass type is ignored: two instances of different types
 will have the same hash if they have the same attribute/value pairs.
 """
+
 import dataclasses
 import datetime
 import hashlib
@@ -57,9 +58,7 @@ def _json_default(thing: object) -> Any:
         pass
     if isinstance(thing, datetime.datetime):
         return thing.isoformat(timespec="microseconds")
-    raise TypeError(
-        f"Object of type {type(thing).__name__} is not JSON serializable"
-    )
+    raise TypeError(f"Object of type {type(thing).__name__} is not JSON serializable")
 
 
 def _dataclass_dict(thing: object) -> Dict[str, Any]:
