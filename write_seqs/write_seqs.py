@@ -441,7 +441,7 @@ def get_items_from_input_paths(
         with open(file_path) as inf:
             split = [os.path.join(src_data_dir, p.strip()) for p in inf.readlines()]
         for p in split:
-            assert os.path.exists(p)
+            assert os.path.exists(p), f"{p} does not exist"
         items.append(
             [CorpusItem(p, drop_spelling=seq_settings.drop_spelling) for p in split]
         )
