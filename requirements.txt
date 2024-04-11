@@ -1,10 +1,8 @@
 # TODO remove -e
 -e ../reprs
--e ../time_shifter/
 -e /Users/malcolm/google_drive/python/malmus/music_df
 # I'd like to remove the mido dependency by making it optional
 # for music_df
-mido
 pandas
 pyyaml
 omegaconf

@@ -3,7 +3,12 @@ import os
 import typing as t
 from dataclasses import asdict, dataclass, field
 
-from reprs.midi_like import MidiLikeSettings
+try:
+    from reprs.midi_like import MidiLikeSettings
+
+    MIDILIKE_SUPPORTED = True
+except ImportError:
+    MIDILIKE_SUPPORTED = False
 from reprs.oct import OctupleEncodingSettings
 from reprs.shared import ReprSettingsBase
 
@@ -64,7 +69,9 @@ class SequenceDataSettings:
     repr_settings_oct: OctupleEncodingSettings = field(
         default_factory=OctupleEncodingSettings
     )
-    repr_settings_midilike: MidiLikeSettings = field(default_factory=MidiLikeSettings)
+    repr_settings_midilike: OctupleEncodingSettings = field(
+        default_factory=OctupleEncodingSettings
+    )
 
     def __post_init__(self):
         if isinstance(self.features, str):
@@ -92,6 +99,7 @@ class SequenceDataSettings:
             assert isinstance(value, OctupleEncodingSettings)
             self.repr_settings_oct = value
         elif self.repr_type == "midilike":
+            assert MIDILIKE_SUPPORTED
             assert isinstance(value, MidiLikeSettings)
             self.repr_settings_midilike = value
         else:

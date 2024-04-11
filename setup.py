@@ -8,7 +8,7 @@ setup(
     description="TODO",
     long_description="TODO",
     long_description_content_type="text/markdown",
-    install_requires=[],
+    install_requires=["pandas", "pyyaml", "omegaconf", "dacite", "music_df"],
     url="TODO",
     project_urls={
         "Bug Tracker": "TODO",

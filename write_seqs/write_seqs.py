@@ -13,7 +13,13 @@ import pandas as pd
 import yaml
 from music_df.add_feature import concatenate_features
 from reprs import ReprEncodeError
-from reprs.midi_like import MidiLikeSettings
+
+try:
+    from reprs.midi_like import MidiLikeSettings
+
+    MIDILIKE_SUPPORTED = True
+except ImportError:
+    MIDILIKE_SUPPORTED = False
 from reprs.oct import OctupleEncodingSettings
 from reprs.shared import ReprSettingsBase
 
@@ -541,7 +547,7 @@ def write_datasets(
         )
         if seq_settings.repr_type == "oct":
             repr_setting_cls = OctupleEncodingSettings
-        elif seq_settings.repr_type == "midilike":
+        elif MIDILIKE_SUPPORTED and seq_settings.repr_type == "midilike":
             repr_setting_cls = MidiLikeSettings
         else:
             raise NotImplementedError()
