@@ -155,10 +155,14 @@ def init_dirs(output_folder):
     os.makedirs(dirname, exist_ok=True)
 
 
-def item_iterator(items: list[CorpusItem], verbose: bool) -> t.Iterator[CorpusItem]:
+def item_iterator(
+    items: list[CorpusItem], verbose: bool, start_i: int = 0, total_i: int | None = None
+) -> t.Iterator[CorpusItem]:
+    if total_i is None:
+        total_i = len(items)
     if verbose:
-        for i, item in enumerate(items):
-            print(f"{i + 1}/{len(items)}", item.csv_path)
+        for i, item in enumerate(items, start=start_i):
+            print(f"{i + 1}/{total_i}", item.csv_path)
             yield item
     else:
         yield from items
@@ -335,6 +339,8 @@ def get_concatenated_feature_names(seq_settings: SequenceDataSettings):
 
 
 def write_data_worker(
+    start_i: int,
+    total_i: int,
     data_chunk: list[CorpusItem],
     shared_file_counter,
     format_path: str,
@@ -400,6 +406,8 @@ def write_data(
         write_data_worker,
         [
             (
+                i * chunk_size,
+                len(items),
                 data_chunk,
                 shared_file_counter,
                 format_path,
@@ -409,7 +417,7 @@ def write_data(
                 verbose,
                 split,
             )
-            for data_chunk in item_chunks
+            for i, data_chunk in enumerate(item_chunks)
         ],
     )
     pool.close()
