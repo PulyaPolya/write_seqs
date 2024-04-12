@@ -224,10 +224,11 @@ class CSVChunkWriter:
                 self._chunk_count += 1
                 path = self._fmt_str.format(self._chunk_count)
             else:
-                self._shared_file_counter.value += 1  # type:ignore
-                path = self._fmt_str.format(
-                    self._shared_file_counter.value  # type:ignore
-                )
+                with self._shared_file_counter.get_lock():
+                    self._shared_file_counter.value += 1  # type:ignore
+                    path = self._fmt_str.format(
+                        self._shared_file_counter.value  # type:ignore
+                    )
             self._outf = open(path, "w", newline="")
             self._writer = csv.writer(self._outf, delimiter=",")
             self._writer.writerow(self._header)

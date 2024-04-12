@@ -38,6 +38,12 @@ import shutil
 from pathlib import Path
 import pandas as pd
 
+import traceback, pdb, sys
+def custom_excepthook(exc_type, exc_value, exc_traceback):
+    if exc_type != KeyboardInterrupt:
+        traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stdout)
+        pdb.post_mortem(exc_traceback)
+sys.excepthook = custom_excepthook
 
 def parse_args():
     parser = argparse.ArgumentParser()
