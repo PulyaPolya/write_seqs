@@ -206,6 +206,7 @@ class CSVChunkWriter:
         header,
         n_lines_per_chunk=50000,
         shared_file_counter=None,
+        lock=None,
     ):
         self._header = header
         self._fmt_str = path_format_str
@@ -215,6 +216,7 @@ class CSVChunkWriter:
         self._writer = None
         self._modulo = n_lines_per_chunk - 1
         self._outf = None
+        self._lock = lock
 
     def writerow(self, row: list[str]):
         if self._writer is None or (not self._line_count % self._modulo):
@@ -224,7 +226,8 @@ class CSVChunkWriter:
                 self._chunk_count += 1
                 path = self._fmt_str.format(self._chunk_count)
             else:
-                with self._shared_file_counter.get_lock():
+                assert self._lock is not None
+                with self._lock:
                     self._shared_file_counter.value += 1  # type:ignore
                     path = self._fmt_str.format(
                         self._shared_file_counter.value  # type:ignore
@@ -345,6 +348,7 @@ def write_data_worker(
     total_i: int,
     data_chunk: list[CorpusItem],
     shared_file_counter,
+    lock,
     format_path: str,
     features: list[str],
     seq_settings: SequenceDataSettings,
@@ -359,6 +363,7 @@ def write_data_worker(
         + get_concatenated_feature_names(seq_settings)
         + list(seq_settings.sequence_level_features),
         shared_file_counter=shared_file_counter,
+        lock=lock,
     )
     try:
         for item in item_iterator(data_chunk, verbose, start_i, total_i):
@@ -406,6 +411,7 @@ def write_data(
     chunk_size = math.ceil(len(items) / n_workers)
     item_chunks = chunks(items, chunk_size)
     manager = multiprocessing.Manager()
+    lock = manager.Lock()
     shared_file_counter = manager.Value("i", 0)
 
     init_dirs(output_folder)
@@ -419,6 +425,7 @@ def write_data(
                 len(items),
                 data_chunk,
                 shared_file_counter,
+                lock,
                 format_path,
                 features,
                 seq_settings,
