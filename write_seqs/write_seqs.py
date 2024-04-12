@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import pickle
+import random
 import typing as t
 from fractions import Fraction
 from functools import cached_property
@@ -385,6 +386,12 @@ def write_data(
 ):
     if not items:
         return
+
+    items = items.copy()
+
+    # We shuffle in the hope that long and short items will be more or less evenly
+    #   distributed between the workers
+    random.shuffle(items)
 
     if seq_settings.repr_type != "oct":
         raise NotImplementedError("I need to implement 'df_indices'")
