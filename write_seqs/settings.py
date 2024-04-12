@@ -73,7 +73,7 @@ class SequenceDataSettings:
         default_factory=OctupleEncodingSettings
     )
 
-    unicode_normalization_form: str = "NFD"
+    unicode_normalization_form: t.Literal["NFD", "NFC"] = "NFD"
 
     def __post_init__(self):
         if isinstance(self.features, str):
