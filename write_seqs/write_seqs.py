@@ -359,7 +359,7 @@ def write_data_worker(
         shared_file_counter=shared_file_counter,
     )
     try:
-        for item in item_iterator(data_chunk, verbose):
+        for item in item_iterator(data_chunk, verbose, start_i, total_i):
             write_item(
                 item, seq_settings, repr_settings, features, split, csv_chunk_writer
             )
