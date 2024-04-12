@@ -73,6 +73,8 @@ class SequenceDataSettings:
         default_factory=OctupleEncodingSettings
     )
 
+    unicode_normalization_form: str = "NFD"
+
     def __post_init__(self):
         if isinstance(self.features, str):
             self.features = [self.features]

@@ -28,6 +28,8 @@ from write_seqs.augmentations import augment
 from write_seqs.settings import SequenceDataSettings, get_dataset_base_dir, save_dclass
 from write_seqs.splits_utils import get_paths
 
+import unicodedata
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -439,7 +441,13 @@ def get_items_from_input_paths(
             items.append([])
             continue
         with open(file_path) as inf:
-            split = [os.path.join(src_data_dir, p.strip()) for p in inf.readlines()]
+            split = [
+                unicodedata.normalize(
+                    seq_settings.unicode_normalization_form,
+                    os.path.join(src_data_dir, p.strip()),
+                )
+                for p in inf.readlines()
+            ]
         for p in split:
             assert os.path.exists(p), f"{p} does not exist"
         items.append(
