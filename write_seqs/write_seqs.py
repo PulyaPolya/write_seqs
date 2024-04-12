@@ -389,9 +389,10 @@ def write_data(
 
     items = items.copy()
 
-    # We shuffle in the hope that long and short items will be more or less evenly
+    # We shuffle in the h# We shuffle in the hope that long and short items will be more or less evenly
     #   distributed between the workers
-    random.shuffle(items)
+    # Actually, if we do this, it causes the metadata to be wrong!
+    # random.shuffle(items)
 
     if seq_settings.repr_type != "oct":
         raise NotImplementedError("I need to implement 'df_indices'")
