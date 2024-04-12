@@ -2,6 +2,7 @@ import csv
 import hashlib
 import json
 import logging
+import math
 import os
 import pickle
 import typing as t
@@ -13,6 +14,8 @@ import pandas as pd
 import yaml
 from music_df.add_feature import concatenate_features
 from reprs import ReprEncodeError
+
+import multiprocessing
 
 try:
     from reprs.midi_like import MidiLikeSettings
@@ -152,7 +155,7 @@ def init_dirs(output_folder):
     os.makedirs(dirname, exist_ok=True)
 
 
-def item_iterator(items: t.List[CorpusItem], verbose: bool) -> t.Iterator[CorpusItem]:
+def item_iterator(items: list[CorpusItem], verbose: bool) -> t.Iterator[CorpusItem]:
     if verbose:
         for i, item in enumerate(items):
             print(f"{i + 1}/{len(items)}", item.csv_path)
@@ -208,7 +211,7 @@ class CSVChunkWriter:
         self._modulo = n_lines_per_chunk - 1
         self._outf = None
 
-    def writerow(self, row: t.List[str]):
+    def writerow(self, row: list[str]):
         if self._writer is None or (not self._line_count % self._modulo):
             if self._outf is not None:
                 self._outf.close()
@@ -331,36 +334,86 @@ def get_concatenated_feature_names(seq_settings: SequenceDataSettings):
     return out
 
 
-def write_data(
-    output_folder: str,
-    items: t.List[CorpusItem],
-    split: str,
+def write_data_worker(
+    data_chunk: list[CorpusItem],
+    shared_file_counter,
+    format_path: str,
+    features: list[str],
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
-    verbose: bool = True,
+    verbose: bool,
+    split: str,
 ):
-    if seq_settings.repr_type != "oct":
-        raise NotImplementedError("I need to implement 'df_indices'")
-    data_dir = get_split_dir(output_folder, split)
-    format_path = os.path.join(data_dir, "{}.csv")
-    os.makedirs(os.path.dirname(format_path), exist_ok=True)
-    features = list(seq_settings.features)
     csv_chunk_writer = CSVChunkWriter(
         format_path,
         COLUMNS
         + features
         + get_concatenated_feature_names(seq_settings)
         + list(seq_settings.sequence_level_features),
+        shared_file_counter=shared_file_counter,
     )
     try:
-        init_dirs(output_folder)
-        for item in item_iterator(items, verbose):
+        for item in item_iterator(data_chunk, verbose):
             write_item(
                 item, seq_settings, repr_settings, features, split, csv_chunk_writer
             )
 
     finally:
         csv_chunk_writer.close()
+
+
+def chunks(list_, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(list_), n):
+        yield list_[i : i + n]
+
+
+def write_data(
+    output_folder: str,
+    items: list[CorpusItem],
+    split: str,
+    seq_settings: SequenceDataSettings,
+    repr_settings: ReprSettingsBase,
+    verbose: bool = True,
+    n_workers: int = 1,
+):
+    if not items:
+        return
+
+    if seq_settings.repr_type != "oct":
+        raise NotImplementedError("I need to implement 'df_indices'")
+    data_dir = get_split_dir(output_folder, split)
+    format_path = os.path.join(data_dir, "{}.csv")
+    os.makedirs(os.path.dirname(format_path), exist_ok=True)
+    features = list(seq_settings.features)
+
+    n_workers = max(n_workers, 1)
+    chunk_size = math.ceil(len(items) / n_workers)
+    item_chunks = chunks(items, chunk_size)
+    manager = multiprocessing.Manager()
+    shared_file_counter = manager.Value("i", 0)
+
+    init_dirs(output_folder)
+
+    pool = multiprocessing.Pool(processes=n_workers)
+    pool.starmap(
+        write_data_worker,
+        [
+            (
+                data_chunk,
+                shared_file_counter,
+                format_path,
+                features,
+                seq_settings,
+                repr_settings,
+                verbose,
+                split,
+            )
+            for data_chunk in item_chunks
+        ],
+    )
+    pool.close()
+    pool.join()
 
 
 def write_vocab(
@@ -459,12 +512,13 @@ def get_items_from_input_paths(
 def write_datasets_sub(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
-    splits_todo: t.Dict[str, bool],
+    splits_todo: dict[str, bool],
     output_folder: str,
     input_paths_folder: str | None = None,
-    ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
+    ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
     vocab_only: bool = False,
+    n_workers: int = 1,
 ):
     items_tup = None
     if input_paths_folder:
@@ -503,10 +557,11 @@ def write_datasets_sub(
                     split,
                     seq_settings,
                     seq_settings.repr_settings,
+                    n_workers=n_workers,
                 )
 
 
-def check_if_splits_exist(output_folder: str, overwrite: bool) -> t.Dict[str, bool]:
+def check_if_splits_exist(output_folder: str, overwrite: bool) -> dict[str, bool]:
     out = {}
     for split in ("train", "valid", "test"):
         data_path = get_split_dir(output_folder, split)
@@ -533,8 +588,9 @@ def write_datasets(
     data_settings_path: Path | str | None = None,
     overwrite: bool = False,
     frac: float = 1.0,
-    ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
-    path_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+    ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
+    n_workers: int = 1,
+    path_kwargs: t.Optional[dict[str, t.Any]] = None,
 ):
     if path_kwargs is None:
         path_kwargs = {}
@@ -577,6 +633,7 @@ def write_datasets(
             input_paths_folder=input_paths_folder,
             ratios=ratios,
             frac=frac,
+            n_workers=n_workers,
         )
     else:
         print("All data exists")
