@@ -266,7 +266,7 @@ def write_item(
         for concat_feature in seq_settings.concatenated_features
     ]
 
-    features = features + concat_feature_names
+    features = list(features) + concat_feature_names
 
     if not seq_settings.use_tempi:
         # Give everything the same tempo to test the effect of not using tempi
