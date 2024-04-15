@@ -22,6 +22,7 @@ features:
   - key_signature
   - granular_key_signature
   - tonicization
+  - root_pc
 concatenated_features:
   - [key_pc, mode]
   - [key_signature, mode]
