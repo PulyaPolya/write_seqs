@@ -109,14 +109,7 @@ def _get_paths_from_corpora(
             prop := corpora_sample_proportions.get(corpus_name, None) is not None
         ):
             csv_paths = random.sample(csv_paths, int(prop * len(csv_paths)))
-        to_extend.extend(
-            csv_paths
-            # TODO: (Malcolm 2024-03-13) do we need corpus_name and drop_spelling attrs?
-            # [
-            #     # CorpusItem(csv_path, corpus_name, seq_settings.drop_spelling)
-            #     # for csv_path in csv_paths
-            # ]
-        )
+        to_extend.extend(csv_paths)
 
     training_only_items = sorted(training_only_items)
     # We sort to be sure that the result will be stable

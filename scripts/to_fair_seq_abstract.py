@@ -34,14 +34,22 @@ midi_test.txt       midi_valid.txt      chord_tone_train.txt key_pc_test.txt    
 import argparse
 import json
 import os
+import shutil
 from pathlib import Path
 import pandas as pd
 
+import traceback, pdb, sys
+def custom_excepthook(exc_type, exc_value, exc_traceback):
+    if exc_type != KeyboardInterrupt:
+        traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stdout)
+        pdb.post_mortem(exc_traceback)
+sys.excepthook = custom_excepthook
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -72,7 +80,10 @@ def main():
     assert isinstance(targets, list)
 
     if os.path.exists(output_dir):
-        raise ValueError(f"{output_dir=} exists")
+        if args.overwrite:
+            shutil.rmtree(output_dir)
+        else:
+            raise ValueError(f"{output_dir=} exists")
     os.makedirs(output_dir)
 
     with open(output_dir / "dict.input.txt", "w") as outf:

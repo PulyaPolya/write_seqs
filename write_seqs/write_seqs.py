@@ -2,29 +2,37 @@ import csv
 import hashlib
 import json
 import logging
+import math
 import os
 import pickle
 import random
 import typing as t
-from collections import defaultdict
 from fractions import Fraction
 from functools import cached_property
-from multiprocessing import Lock, Value
 from pathlib import Path
 
 import pandas as pd
 import yaml
 from music_df.add_feature import concatenate_features
 from reprs import ReprEncodeError
-from reprs.midi_like import MidiLikeSettings
+
+import multiprocessing
+
+try:
+    from reprs.midi_like import MidiLikeSettings
+
+    MIDILIKE_SUPPORTED = True
+except ImportError:
+    MIDILIKE_SUPPORTED = False
 from reprs.oct import OctupleEncodingSettings
 from reprs.shared import ReprSettingsBase
 
 from write_seqs.utils.read_config import read_config_oc
 from write_seqs.augmentations import augment
 from write_seqs.settings import SequenceDataSettings, get_dataset_base_dir, save_dclass
-from write_seqs.utils.partition import partition
 from write_seqs.splits_utils import get_paths
+
+import unicodedata
 
 LOGGER = logging.getLogger(__name__)
 
@@ -113,9 +121,6 @@ class CorpusItem:
     def __repr__(self):
         return f"{self.__class__.__name__}({self.csv_path})"
 
-    # csv_path: str
-    # synthetic: bool = False
-
 
 def get_data_dir(output_folder: str):
     return os.path.join(output_folder, "data")
@@ -151,10 +156,14 @@ def init_dirs(output_folder):
     os.makedirs(dirname, exist_ok=True)
 
 
-def item_iterator(items: t.List[CorpusItem], verbose: bool) -> t.Iterator[CorpusItem]:
+def item_iterator(
+    items: list[CorpusItem], verbose: bool, start_i: int = 0, total_i: int | None = None
+) -> t.Iterator[CorpusItem]:
+    if total_i is None:
+        total_i = len(items)
     if verbose:
-        for i, item in enumerate(items):
-            print(f"{i + 1}/{len(items)}", item.csv_path)
+        for i, item in enumerate(items, start=start_i):
+            print(f"{i + 1}/{total_i}", item.csv_path)
             yield item
     else:
         yield from items
@@ -197,6 +206,7 @@ class CSVChunkWriter:
         header,
         n_lines_per_chunk=50000,
         shared_file_counter=None,
+        lock=None,
     ):
         self._header = header
         self._fmt_str = path_format_str
@@ -206,8 +216,9 @@ class CSVChunkWriter:
         self._writer = None
         self._modulo = n_lines_per_chunk - 1
         self._outf = None
+        self._lock = lock
 
-    def writerow(self, row: t.List[str]):
+    def writerow(self, row: list[str]):
         if self._writer is None or (not self._line_count % self._modulo):
             if self._outf is not None:
                 self._outf.close()
@@ -215,10 +226,12 @@ class CSVChunkWriter:
                 self._chunk_count += 1
                 path = self._fmt_str.format(self._chunk_count)
             else:
-                self._shared_file_counter.value += 1  # type:ignore
-                path = self._fmt_str.format(
-                    self._shared_file_counter.value  # type:ignore
-                )
+                assert self._lock is not None
+                with self._lock:
+                    self._shared_file_counter.value += 1  # type:ignore
+                    path = self._fmt_str.format(
+                        self._shared_file_counter.value  # type:ignore
+                    )
             self._outf = open(path, "w", newline="")
             self._writer = csv.writer(self._outf, delimiter=",")
             self._writer.writerow(self._header)
@@ -236,14 +249,6 @@ def get_concatenated_features(
     for concat_feature in seq_settings.concatenated_features:
         df = concatenate_features(df, concat_feature)
     return df
-    #     concat_feature_name = "_".join(concat_feature)
-    #     assert concat_feature_name not in df.columns
-    #     df[concat_feature_name] = df[concat_feature].astype(str).sum(axis=1)
-    #     df.loc[
-    #         ((df[concat_feature].isna()) | (df[concat_feature] == "na")).any(axis=1),
-    #         concat_feature_name,
-    #     ] = "na"
-    # return df
 
 
 def write_item(
@@ -261,7 +266,7 @@ def write_item(
         for concat_feature in seq_settings.concatenated_features
     ]
 
-    features = features + concat_feature_names
+    features = list(features) + concat_feature_names
 
     if not seq_settings.use_tempi:
         # Give everything the same tempo to test the effect of not using tempi
@@ -338,36 +343,101 @@ def get_concatenated_feature_names(seq_settings: SequenceDataSettings):
     return out
 
 
-def write_data(
-    output_folder: str,
-    items: t.List[CorpusItem],
-    split: str,
+def write_data_worker(
+    start_i: int,
+    total_i: int,
+    data_chunk: list[CorpusItem],
+    shared_file_counter,
+    lock,
+    format_path: str,
+    features: list[str],
     seq_settings: SequenceDataSettings,
     repr_settings: ReprSettingsBase,
-    verbose: bool = True,
+    verbose: bool,
+    split: str,
 ):
-    if seq_settings.repr_type != "oct":
-        raise NotImplementedError("I need to implement 'df_indices'")
-    data_dir = get_split_dir(output_folder, split)
-    format_path = os.path.join(data_dir, "{}.csv")
-    os.makedirs(os.path.dirname(format_path), exist_ok=True)
-    features = list(seq_settings.features)
     csv_chunk_writer = CSVChunkWriter(
         format_path,
         COLUMNS
         + features
         + get_concatenated_feature_names(seq_settings)
         + list(seq_settings.sequence_level_features),
+        shared_file_counter=shared_file_counter,
+        lock=lock,
     )
     try:
-        init_dirs(output_folder)
-        for item in item_iterator(items, verbose):
+        for item in item_iterator(data_chunk, verbose, start_i, total_i):
             write_item(
                 item, seq_settings, repr_settings, features, split, csv_chunk_writer
             )
 
     finally:
         csv_chunk_writer.close()
+
+
+def chunks(list_, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(list_), n):
+        yield list_[i : i + n]
+
+
+def write_data(
+    output_folder: str,
+    items: list[CorpusItem],
+    split: str,
+    seq_settings: SequenceDataSettings,
+    repr_settings: ReprSettingsBase,
+    verbose: bool = True,
+    n_workers: int = 1,
+):
+    if not items:
+        return
+
+    items = items.copy()
+
+    # We shuffle in the h# We shuffle in the hope that long and short items will be more or less evenly
+    #   distributed between the workers
+    # Actually, if we do this, it causes the metadata to be wrong!
+    # random.shuffle(items)
+
+    if seq_settings.repr_type != "oct":
+        raise NotImplementedError("I need to implement 'df_indices'")
+    data_dir = get_split_dir(output_folder, split)
+    format_path = os.path.join(data_dir, "{}.csv")
+    os.makedirs(os.path.dirname(format_path), exist_ok=True)
+    features = list(seq_settings.features)
+
+    n_workers = max(n_workers, 1)
+    chunk_size = math.ceil(len(items) / n_workers)
+    item_chunks = chunks(items, chunk_size)
+    manager = multiprocessing.Manager()
+    lock = manager.Lock()
+    shared_file_counter = manager.Value("i", 0)
+
+    init_dirs(output_folder)
+
+    pool = multiprocessing.Pool(processes=n_workers)
+    pool.starmap(
+        write_data_worker,
+        [
+            (
+                i * chunk_size,
+                len(items),
+                data_chunk,
+                shared_file_counter,
+                lock,
+                format_path,
+                features,
+                seq_settings,
+                repr_settings,
+                verbose,
+                split,
+            )
+            for i, data_chunk in enumerate(item_chunks)
+        ],
+    )
+    pool.close()
+    pool.join()
 
 
 def write_vocab(
@@ -448,7 +518,13 @@ def get_items_from_input_paths(
             items.append([])
             continue
         with open(file_path) as inf:
-            split = [os.path.join(src_data_dir, p.strip()) for p in inf.readlines()]
+            split = [
+                unicodedata.normalize(
+                    seq_settings.unicode_normalization_form,
+                    os.path.join(src_data_dir, p.strip()),
+                )
+                for p in inf.readlines()
+            ]
         for p in split:
             assert os.path.exists(p), f"{p} does not exist"
         items.append(
@@ -460,12 +536,13 @@ def get_items_from_input_paths(
 def write_datasets_sub(
     src_data_dir: str,
     seq_settings: SequenceDataSettings,
-    splits_todo: t.Dict[str, bool],
+    splits_todo: dict[str, bool],
     output_folder: str,
     input_paths_folder: str | None = None,
-    ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
+    ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
     frac: float = 1.0,
     vocab_only: bool = False,
+    n_workers: int = 1,
 ):
     items_tup = None
     if input_paths_folder:
@@ -504,10 +581,11 @@ def write_datasets_sub(
                     split,
                     seq_settings,
                     seq_settings.repr_settings,
+                    n_workers=n_workers,
                 )
 
 
-def check_if_splits_exist(output_folder: str, overwrite: bool) -> t.Dict[str, bool]:
+def check_if_splits_exist(output_folder: str, overwrite: bool) -> dict[str, bool]:
     out = {}
     for split in ("train", "valid", "test"):
         data_path = get_split_dir(output_folder, split)
@@ -534,8 +612,9 @@ def write_datasets(
     data_settings_path: Path | str | None = None,
     overwrite: bool = False,
     frac: float = 1.0,
-    ratios: t.Tuple[float, float, float] = (0.8, 0.1, 0.1),
-    path_kwargs: t.Optional[t.Dict[str, t.Any]] = None,
+    ratios: tuple[float, float, float] = (0.8, 0.1, 0.1),
+    n_workers: int = 1,
+    path_kwargs: t.Optional[dict[str, t.Any]] = None,
 ):
     if path_kwargs is None:
         path_kwargs = {}
@@ -548,7 +627,6 @@ def write_datasets(
             config_path=str(data_settings_path),
             cli_args=cli_args if cli_args else [],
         )
-        # seq_settings = SequenceDataSettings(**load_config_from_yaml(data_settings))
     if repr_settings_path is not None:
         # TODO: (Malcolm 2024-03-13) eventually merge repr settings rather
         #   than overwriting them
@@ -557,7 +635,7 @@ def write_datasets(
         )
         if seq_settings.repr_type == "oct":
             repr_setting_cls = OctupleEncodingSettings
-        elif seq_settings.repr_type == "midilike":
+        elif MIDILIKE_SUPPORTED and seq_settings.repr_type == "midilike":
             repr_setting_cls = MidiLikeSettings
         else:
             raise NotImplementedError()
@@ -579,6 +657,7 @@ def write_datasets(
             input_paths_folder=input_paths_folder,
             ratios=ratios,
             frac=frac,
+            n_workers=n_workers,
         )
     else:
         print("All data exists")

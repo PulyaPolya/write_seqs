@@ -19,7 +19,7 @@ if __name__ == "__main__":
         "ignore", message=r"Release of note at .* < onset of note at .*"
     )
     parser = argparse.ArgumentParser()
-    # parser.add_argument("--repr-type", choices=["midilike", "oct"], required=True)
+
     parser.add_argument("--repr-settings", type=str, help="Path to YAML file")
     parser.add_argument("--data-settings", type=str, help="Path to YAML file")
     parser.add_argument("--overwrite", action="store_true")
@@ -37,6 +37,12 @@ if __name__ == "__main__":
         help="taken from 'SRC_DATA_DIR' environment variable if not passed",
     )
     parser.add_argument("--input-paths-dir", type=str, default=None)
+    parser.add_argument(
+        "--num-workers",
+        default=None,
+        type=int,
+        help="If None, set with `os.cpu_count()`",
+    )
     parser.add_argument("--msdebug", action="store_true")
 
     args, remaining = parser.parse_known_args()
@@ -61,5 +67,6 @@ if __name__ == "__main__":
         data_settings_path=args.data_settings,
         overwrite=args.overwrite,
         frac=args.frac,
+        n_workers=os.cpu_count() if args.num_workers is None else args.num_workers,
         path_kwargs={"seed": args.seed},
     )
