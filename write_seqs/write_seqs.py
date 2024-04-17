@@ -15,7 +15,7 @@ import pandas as pd
 import yaml
 from music_df.add_feature import concatenate_features
 from reprs import ReprEncodeError
-
+import sys
 import multiprocessing
 
 try:
@@ -306,7 +306,8 @@ def write_item(
                 feature_segments = [
                     " ".join(str(x) for x in segment[f]) for f in features
                 ]
-                print("-\\|/"[i % 4], end="\r", flush=True)
+                if sys.stdin.isatty():
+                    print("-\\|/"[i % 4], end="\r", flush=True)
                 write_symbols(
                     csv_chunk_writer,
                     item.score_id,
@@ -320,8 +321,8 @@ def write_item(
                     *feature_segments,
                     *sequence_level_features,
                 )
-    except ReprEncodeError:
-        LOGGER.warning(f"encoding {item.csv_path} failed, skipping")
+    except ReprEncodeError as exc:
+        LOGGER.warning(f"Skipping encoding {item.csv_path} due to {repr(exc)}")
 
 
 COLUMNS = [

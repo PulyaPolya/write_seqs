@@ -58,6 +58,10 @@ if __name__ == "__main__":
 
         sys.excepthook = custom_excepthook
     random.seed(args.seed)
+
+    n_workers = os.cpu_count() if args.num_workers is None else args.num_workers
+    assert isinstance(n_workers, int)
+
     output_folder = write_datasets(
         src_data_dir=args.src_data_dir,
         output_dir=args.output_dir,
@@ -67,6 +71,6 @@ if __name__ == "__main__":
         data_settings_path=args.data_settings,
         overwrite=args.overwrite,
         frac=args.frac,
-        n_workers=os.cpu_count() if args.num_workers is None else args.num_workers,
+        n_workers=n_workers,
         path_kwargs={"seed": args.seed},
     )
