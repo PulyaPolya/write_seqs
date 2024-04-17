@@ -75,9 +75,9 @@ def process_csv(csv_path, config, csv_chunk_writer):
     )
 
 
-def process_chunk(csv_files, config, counter):
+def process_chunk(csv_files, config, counter, lock):
     format_path = os.path.join(config.output_folder, "{}.csv")
-    csv_chunk_writer = CSVChunkWriter(format_path, COLUMNS, shared_file_counter=counter)
+    csv_chunk_writer = CSVChunkWriter(format_path, COLUMNS, shared_file_counter=counter, lock=lock)
     for csv_file in csv_files:
         process_csv(csv_file, config, csv_chunk_writer)
 
@@ -101,6 +101,7 @@ if __name__ == "__main__":
 
     if config.debug:
         pdb_hook()
+    
 
     assert not config.seq_settings.features
     assert config.seq_settings.repr_type == "oct"
@@ -124,11 +125,12 @@ if __name__ == "__main__":
         )
         manager = Manager()
         counter = manager.Value("i", 0)
+        lock = manager.Lock()
 
         with Pool(config.num_workers) as pool:
             pool.map(
-                partial(process_chunk, config=config, counter=counter),
+                partial(process_chunk, config=config, counter=counter, lock=lock),
                 file_chunks,
             )
     else:
-        process_chunk(csv_files, config=config, counter=None)
+        process_chunk(csv_files, config=config, counter=None, lock=None)
