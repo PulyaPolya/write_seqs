@@ -75,32 +75,30 @@ class CorpusItem:
         self._drop_spelling = drop_spelling
 
     def read_df(self):
-        with PrintMessageOnWarningOrExcept(self.csv_path):
-            labeled_df = pd.read_csv(
-                self.csv_path,
-                converters={"onset": fraction_to_float, "release": fraction_to_float},
-                dtype={"other": object},
-            )
-            if "Unnamed: 0" in labeled_df.columns:
-                labeled_df = labeled_df.set_index("Unnamed: 0")
-                labeled_df.index.name = None
-            if self._drop_spelling and "spelling" in labeled_df.columns:
-                labeled_df = labeled_df.drop("spelling", axis=1)
+        # with PrintMessageOnWarningOrExcept(self.csv_path):
+        labeled_df = pd.read_csv(
+            self.csv_path,
+            converters={"onset": fraction_to_float, "release": fraction_to_float},
+            dtype={"other": object},
+        )
+        if "Unnamed: 0" in labeled_df.columns:
+            labeled_df = labeled_df.set_index("Unnamed: 0")
+            labeled_df.index.name = None
+        if self._drop_spelling and "spelling" in labeled_df.columns:
+            labeled_df = labeled_df.drop("spelling", axis=1)
 
-            labeled_df.attrs |= self.attrs
-            labeled_df.attrs["global_key"] = self.attrs.get("global_key", None)
-            labeled_df.attrs["global_key_sig"] = self.attrs.get("global_key_sig", None)
-            labeled_df.attrs["pc_columns"] = self.attrs.get("pc_columns", ())
-            labeled_df.attrs["pitch_columns"] = self.attrs.get(
-                "pitch_columns", ("pitch",)
-            )
-            labeled_df.attrs["spelled_columns"] = self.attrs.get("spelled_columns", ())
-            for col in labeled_df.attrs["spelled_columns"]:
-                # We want to make sure that we're using the "b" for flat spelling
-                #   style rather than "-" (so that transposition works correctly.)
-                assert (
-                    (labeled_df[col].str.find("-") == -1) | (labeled_df[col].isna())
-                ).all()
+        labeled_df.attrs |= self.attrs
+        labeled_df.attrs["global_key"] = self.attrs.get("global_key", None)
+        labeled_df.attrs["global_key_sig"] = self.attrs.get("global_key_sig", None)
+        labeled_df.attrs["pc_columns"] = self.attrs.get("pc_columns", ())
+        labeled_df.attrs["pitch_columns"] = self.attrs.get("pitch_columns", ("pitch",))
+        labeled_df.attrs["spelled_columns"] = self.attrs.get("spelled_columns", ())
+        for col in labeled_df.attrs["spelled_columns"]:
+            # We want to make sure that we're using the "b" for flat spelling
+            #   style rather than "-" (so that transposition works correctly.)
+            assert (
+                (labeled_df[col].str.find("-") == -1) | (labeled_df[col].isna())
+            ).all()
 
         return labeled_df
 
@@ -375,10 +373,10 @@ def write_data_worker(
     )
     try:
         for item in item_iterator(data_chunk, verbose, start_i, total_i):
-            with PrintMessageOnWarningOrExcept(item.csv_path):
-                write_item(
-                    item, seq_settings, repr_settings, features, split, csv_chunk_writer
-                )
+            # with PrintMessageOnWarningOrExcept(item.csv_path):
+            write_item(
+                item, seq_settings, repr_settings, features, split, csv_chunk_writer
+            )
 
     finally:
         csv_chunk_writer.close()
