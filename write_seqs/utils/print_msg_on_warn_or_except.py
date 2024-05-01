@@ -1,5 +1,8 @@
 import warnings
 import contextlib
+import logging
+
+LOGGER = logging.getLogger(__name__)
 
 
 class PrintMessageOnWarningOrExcept(contextlib.ContextDecorator):
@@ -20,7 +23,7 @@ class PrintMessageOnWarningOrExcept(contextlib.ContextDecorator):
     def __exit__(self, exc_type, exc_value, traceback):
         self.catcher.__exit__(exc_type, exc_value, traceback)
         if self.log or exc_type is not None:
-            print(self.msg)
+            LOGGER.warning(self.msg)
 
         for w in self.log:
             warnings.showwarning(w.message, w.category, w.filename, w.lineno)

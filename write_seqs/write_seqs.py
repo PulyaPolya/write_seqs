@@ -79,6 +79,7 @@ class CorpusItem:
             labeled_df = pd.read_csv(
                 self.csv_path,
                 converters={"onset": fraction_to_float, "release": fraction_to_float},
+                # dtype={"other": object},
             )
             if "Unnamed: 0" in labeled_df.columns:
                 labeled_df = labeled_df.set_index("Unnamed: 0")
