@@ -423,11 +423,32 @@ def write_data(
 
     init_dirs(output_folder)
 
-    pool = multiprocessing.Pool(processes=n_workers)
-    pool.starmap(
-        write_data_worker,
-        [
-            (
+    if n_workers > 1:
+        pool = multiprocessing.Pool(processes=n_workers)
+        pool.starmap(
+            write_data_worker,
+            [
+                (
+                    i * chunk_size,
+                    len(items),
+                    data_chunk,
+                    shared_file_counter,
+                    lock,
+                    format_path,
+                    features,
+                    seq_settings,
+                    repr_settings,
+                    verbose,
+                    split,
+                )
+                for i, data_chunk in enumerate(item_chunks)
+            ],
+        )
+        pool.close()
+        pool.join()
+    else:
+        for i, data_chunk in enumerate(item_chunks):
+            write_data_worker(
                 i * chunk_size,
                 len(items),
                 data_chunk,
@@ -440,11 +461,6 @@ def write_data(
                 verbose,
                 split,
             )
-            for i, data_chunk in enumerate(item_chunks)
-        ],
-    )
-    pool.close()
-    pool.join()
 
 
 def write_vocab(

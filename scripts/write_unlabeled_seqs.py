@@ -77,7 +77,9 @@ def process_csv(csv_path, config, csv_chunk_writer):
 
 def process_chunk(csv_files, config, counter, lock):
     format_path = os.path.join(config.output_folder, "{}.csv")
-    csv_chunk_writer = CSVChunkWriter(format_path, COLUMNS, shared_file_counter=counter, lock=lock)
+    csv_chunk_writer = CSVChunkWriter(
+        format_path, COLUMNS, shared_file_counter=counter, lock=lock
+    )
     for csv_file in csv_files:
         process_csv(csv_file, config, csv_chunk_writer)
 
@@ -101,11 +103,11 @@ if __name__ == "__main__":
 
     if config.debug:
         pdb_hook()
-    
 
     assert not config.seq_settings.features
     assert config.seq_settings.repr_type == "oct"
     csv_files = get_csv_files(config.input_folder)
+
     if config.regex is not None:
         csv_files = [f for f in csv_files if re.search(config.regex, f)]
     random.seed(config.seed)
