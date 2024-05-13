@@ -39,17 +39,31 @@ from pathlib import Path
 import pandas as pd
 
 import traceback, pdb, sys
+
+
 def custom_excepthook(exc_type, exc_value, exc_traceback):
     if exc_type != KeyboardInterrupt:
         traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stdout)
         pdb.post_mortem(exc_traceback)
+
+
 sys.excepthook = custom_excepthook
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--explicit-target-dicts",
+        nargs="+",
+        default=None,
+        help="""We usually rely on the fairseq binarizer to make the dicts for us, but
+             if we want to (e.g.) truncate a vocabulary, we can provide it explicitly.
+             (Note that for unknown reasons providing '--nwordssrc N' doesn't seem to
+             work as expected when N is very small)""",
+    )
     args = parser.parse_args()
     return args
 
@@ -88,6 +102,11 @@ def main():
 
     with open(output_dir / "dict.input.txt", "w") as outf:
         outf.write(INPUTS_DICT)
+
+    if args.explicit_target_dicts is not None:
+        for src_path in args.explicit_target_dicts:
+            dst_path = os.path.join(output_dir, os.path.basename(src_path))
+            shutil.copy(src_path, dst_path)
 
     for split in ("train", "test", "valid"):
         if not (input_dir / "data" / split).exists():
