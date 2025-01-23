@@ -62,6 +62,9 @@ if __name__ == "__main__":
     n_workers = os.cpu_count() if args.num_workers is None else args.num_workers
     assert isinstance(n_workers, int)
 
+    if args.frac and args.input_paths_dir:
+        raise ValueError("At most one of --frac and --input-paths-dir should be passed")
+
     output_folder = write_datasets(
         src_data_dir=args.src_data_dir,
         output_dir=args.output_dir,
