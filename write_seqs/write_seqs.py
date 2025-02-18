@@ -15,7 +15,7 @@ from pathlib import Path
 import pandas as pd
 import yaml
 from music_df.add_feature import concatenate_features
-from reprs import ReprEncodeError
+from reprs.reprs import ReprEncodeError
 import sys
 import multiprocessing
 
